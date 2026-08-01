@@ -31,6 +31,11 @@ A feature is not complete until applicable gates pass.
 - iOS Expo Go flow passes when the feature is supported and an iPhone is available.
 - Keyboard, safe areas, back navigation, slow network, offline state and permission denial are checked.
 - Accessibility labels/roles and reduced-motion behavior are reviewed.
+- Colour pairs for text and meaningful UI boundaries meet WCAG 2.1 (4.5:1 ordinary text,
+  3:1 large text and UI boundaries), verified by calculation rather than estimate.
+- Interactive targets are at least 48dp.
+- Layout survives the maximum system font size without clipping.
+- State is never conveyed by colour alone.
 
 ## Git
 
