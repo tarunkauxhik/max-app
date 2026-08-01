@@ -1,98 +1,132 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { useCallback, useMemo, useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+import { ActionRow } from '@/components/ui/action-row';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-state';
+import { ProgressBar } from '@/components/ui/progress-bar';
+import { Screen } from '@/components/ui/screen';
+import { Text } from '@/components/ui/text';
+import { Spacing } from '@/constants/tokens';
+import { todayMock } from '@/features/today/mock-data';
+import { useTheme } from '@/hooks/use-theme';
 
-export default function HomeScreen() {
+export default function TodayScreen() {
+  const colors = useTheme();
+  const { goalTitle, streakDays, actions } = todayMock;
+
+  const [completedIds, setCompletedIds] = useState<string[]>([]);
+  const [checkedIn, setCheckedIn] = useState(false);
+
+  const toggle = useCallback((id: string) => {
+    setCheckedIn(false);
+    setCompletedIds((previous) =>
+      previous.includes(id) ? previous.filter((entry) => entry !== id) : [...previous, id]
+    );
+  }, []);
+
+  const today = useMemo(
+    () =>
+      new Date().toLocaleDateString(undefined, {
+        weekday: 'long',
+        month: 'long',
+        day: 'numeric',
+      }),
+    []
+  );
+
+  const completed = completedIds.length;
+  const total = actions.length;
+  const allComplete = total > 0 && completed === total;
+
   return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+    <Screen>
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <Text variant="display">Today</Text>
+          <Text variant="caption" tone="muted">
+            {today}
+          </Text>
+        </View>
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+        {total === 0 ? (
+          <EmptyState
+            title="Nothing planned yet"
+            body="When you add a goal, today's actions will appear here."
+          />
+        ) : (
+          <>
+            <Card>
+              <Text variant="heading">{goalTitle}</Text>
+              <ProgressBar
+                value={completed}
+                max={total}
+                label={`${completed} of ${total} actions complete`}
+              />
+              <Text variant="caption" tone="streak">
+                {streakDays}-day streak
+              </Text>
+            </Card>
+
+            <View style={styles.section}>
+              <Text variant="heading">Actions</Text>
+              <Card style={styles.actions}>
+                {actions.map((action, index) => (
+                  <View key={action.id}>
+                    {index > 0 ? (
+                      <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                    ) : null}
+                    <ActionRow
+                      title={action.title}
+                      note={action.note}
+                      completed={completedIds.includes(action.id)}
+                      onToggle={() => toggle(action.id)}
+                    />
+                  </View>
+                ))}
+              </Card>
+            </View>
+
+            <View style={styles.section}>
+              <Button
+                label={checkedIn ? 'Checked in' : 'Check in for today'}
+                onPress={() => setCheckedIn(true)}
+                disabled={!allComplete || checkedIn}
+                accessibilityHint={
+                  allComplete ? undefined : 'Complete every action to enable check in'
+                }
+              />
+              {checkedIn ? (
+                <Text variant="caption" tone="success">
+                  Saved for this session only. Nothing is stored yet.
+                </Text>
+              ) : null}
+            </View>
+          </>
+        )}
+      </ScrollView>
+    </Screen>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  content: {
+    padding: Spacing.xl,
+    paddingBottom: Spacing.xxxl,
+    gap: Spacing.xl,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  header: {
+    gap: Spacing.xs,
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  section: {
+    gap: Spacing.md,
+  },
+  actions: {
+    gap: 0,
+    paddingVertical: Spacing.xs,
+  },
+  divider: {
+    height: StyleSheet.hairlineWidth,
   },
 });
