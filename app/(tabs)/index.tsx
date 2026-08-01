@@ -1,3 +1,4 @@
+import { router } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
@@ -9,11 +10,14 @@ import { ProgressBar } from '@/components/ui/progress-bar';
 import { Screen } from '@/components/ui/screen';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/tokens';
+import { useSessionGoal } from '@/features/goals/state';
+import { difficultyLabel } from '@/features/goals/types';
 import { todayMock } from '@/features/today/mock-data';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TodayScreen() {
   const colors = useTheme();
+  const { goal, clearGoal } = useSessionGoal();
   const { goalTitle, streakDays, actions } = todayMock;
 
   const [completedIds, setCompletedIds] = useState<string[]>([]);
@@ -49,6 +53,26 @@ export default function TodayScreen() {
             {today}
           </Text>
         </View>
+
+        {goal ? (
+          <Card>
+            <Text variant="caption" tone="muted">
+              Created this session
+            </Text>
+            <Text variant="heading">{goal.title}</Text>
+            <Text variant="body" tone="secondary">
+              {goal.minutesPerDay} minutes a day, {goal.durationWeeks} weeks,{' '}
+              {difficultyLabel(goal.difficulty).toLowerCase()} pace
+            </Text>
+            <Button label="Clear" variant="ghost" onPress={clearGoal} />
+          </Card>
+        ) : (
+          <Button
+            label="Create a goal"
+            variant="secondary"
+            onPress={() => router.push('/goal/name')}
+          />
+        )}
 
         {total === 0 ? (
           <EmptyState

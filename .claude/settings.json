@@ -1,6 +1,17 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
+    "allow": [
+      "Bash(pnpm exec *)",
+      "Bash(echo \"eslint exit: $?\")",
+      "Bash(git log *)",
+      "Bash(ls -la \"C:/Users/tarun/.claude/projects/c--Users-tarun-projects-max-app/memory/\" 2>/dev/null && echo \"--- MEMORY.md ---\" && cat \"C:/Users/tarun/.claude/projects/c--Users-tarun-projects-max-app/memory/MEMORY.md\" 2>/dev/null || echo \"\\(no MEMORY.md yet\\)\")",
+      "Read(//c/Users/tarun/.claude/projects/c--Users-tarun-projects-max-app/**)",
+      "Bash(gh api *)",
+      "Bash(git show-ref *)",
+      "Bash(command -v curl)",
+      "Bash(curl -s -H \"Accept: application/vnd.github+json\" https://api.github.com/repos/tarunkauxhik/max-app/contributors)"
+    ],
     "deny": [
       "Read(./.env)",
       "Read(./.env.*)",

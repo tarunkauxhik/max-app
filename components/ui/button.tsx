@@ -12,6 +12,8 @@ export type ButtonProps = {
   variant?: ButtonVariant;
   disabled?: boolean;
   accessibilityHint?: string;
+  /** Overrides `label` for screen readers, for when several buttons share one visible word. */
+  accessibilityLabel?: string;
 };
 
 export function Button({
@@ -20,6 +22,7 @@ export function Button({
   variant = 'primary',
   disabled = false,
   accessibilityHint,
+  accessibilityLabel,
 }: ButtonProps) {
   const colors = useTheme();
 
@@ -36,6 +39,7 @@ export function Button({
       accessibilityRole="button"
       accessibilityState={{ disabled }}
       accessibilityHint={accessibilityHint}
+      accessibilityLabel={accessibilityLabel ?? label}
       disabled={disabled}
       onPress={onPress}
       style={({ pressed }) => [
