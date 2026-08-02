@@ -168,16 +168,83 @@ passed unchanged:
 
 See LEARNINGS.
 
-## M4: email authentication
+## M4: email authentication — complete (2026-08-02)
 
-Real sign-up and sign-in screens, session handling, and the error and retry states whose shape
-ADR-009 already fixed. Replaces the "auth screens without backend" idea, which stopped making
-sense once a real backend existed.
+The first milestone where the app talks to a backend. Built in five slices, each with its own
+commit.
+
+Delivered:
+
+- `lib/supabase.ts`, the only place credentials are read. It throws at module load if either
+  variable is missing, if the key carries the `sb_secret_` prefix, or if it is not in the
+  `sb_publishable_` format — a `.env` mistake fails on first launch rather than shipping.
+- A session provider with `loading | signed-out | signed-in`. `loading` holds the native splash
+  so a signed-in cold start never flashes the sign-in screen. `onAuthStateChange` is the single
+  writer of session state, so a token refresh and a sign-out take the same path.
+- Sign-in and sign-up screens built entirely from existing primitives, with inline validation
+  before any network call, a double-guarded submit, and mapped error messages per failure.
+  `describeAuthError` maps Supabase **error codes** — taken from the `ErrorCode` union in
+  `@supabase/auth-js@2.111.0` — and never falls back to a raw library string.
+- Three route gates in sequence: session, then onboarding, then the app. Each stage is unmounted
+  rather than hidden, which is what makes hardware back exit instead of leaking the stage behind
+  it. See ADR-014.
+- Onboarding completion persisted per account, keyed by user id, so the session surviving a
+  restart no longer means replaying a four-step flow. See ADR-013.
+- A real sign out, confirmed before acting, and a Profile header showing the actual signed-in
+  account instead of a fixture identity.
+
+Verified on a physical Android device in Expo Go, in three runs:
+
+- **Run 1 (M4.1–M4.3):** the app boots with the client constructed and the session provider
+  mounted.
+- **Run 2 (M4.4–M4.5), 31 steps:** cold start lands on sign-in; validation fires before any
+  request; sign-up on the confirm-email-OFF branch; onboarding; **force-quit and reopen keeps the
+  session and does not replay onboarding**; real email on Profile; sign out with confirmation;
+  sign back in with onboarding intact; wrong password; airplane mode; duplicate email; hardware
+  back exits at every gate; maximum system font size.
+- **Run 3 (two accounts), 20 steps:** account A signs out without a force-quit, account B signs
+  up on the same running app and gets onboarding from step 1, **B sees none of A's goal, email or
+  interests**, and A's own onboarding survives B having used the device. Rapid double-taps on both
+  Sign in and Create account produce exactly one request.
+
+Run 3 existed because the cross-account clearing in `SessionGoalProvider` and the per-user key in
+`features/onboarding/storage.ts` were written for a case no test had ever run. LEARNINGS records
+that an unexecuted test suite is not evidence of anything; the same applies to app code.
+
+Also fixed, found by review rather than by the device: `user_not_found` now returns the same
+message as `invalid_credentials`, because a distinct "no account uses that email" reply is a
+membership oracle. See SECURITY.md.
+
+Constraints held: no `android/` or `ios/` directory, no prebuild, Expo Go preserved. Two runtime
+packages added, both gated — see DEPENDENCIES.
+
+### Test coverage, stated honestly
+
+TEST_MATRIX's "Auth/data milestone" list is not fully satisfied by M4, and recording that is
+better than implying otherwise.
+
+| Row | Status |
+|---|---|
+| Two users | Covered — run 3 |
+| Logged-out access | Covered — hardware back exits at every gate |
+| Duplicate submit | Covered — run 3, rapid double-tap on both forms |
+| Offline/reconnect | Covered — airplane mode on sign-in |
+| Expired session | **Not covered.** No way to force expiry by hand. M6, with the refresh path |
+| Unauthorized row access | **Not applicable yet.** The app reads no rows. The database side is already covered by pgTAP `004`; the app side lands in M5a |
+
+Intentional limitation: the created goal is still session-only and vanishes on restart. That is
+ADR-005 behaving as designed, not a defect, and M5a is what replaces it.
 
 ## M5: real goals, tasks and check-ins
 
-Replace the session-only state (ADR-005, ADR-007) and the labelled sample data (ADR-009) with
-live queries. Generated database types committed.
+Split in two, because the second half needs history that only the first half can produce.
+
+**M5a — every write path.** Generated database types committed. Onboarding answers and timezone
+written to `profiles`. Goals created, read and archived from the database. Daily actions generated
+lazily per day. Real check-ins. Replaces the session-only state of ADR-005 and ADR-007.
+
+**M5b — Insights on real data.** Streaks, weekly bars and achievements derived from the rows M5a
+produces, replacing the labelled sample data of ADR-009.
 
 ## M6: caching and offline handling
 
