@@ -85,3 +85,23 @@ Record decisions as they are made. Do not rewrite history; supersede an older de
 - Alternatives considered: a `<Redirect>` inside the tab layout — the tab tree still mounts first, so hardware back on the welcome screen would briefly reveal Today behind the gate.
 - Consequences: the tab tree does not mount at all until onboarding passes, so back on the first onboarding screen exits the app, which is the intended Android behaviour. The stack must be split into a `RootStack` child component so it can read context from the provider above it.
 - Revisit when: real auth is added and the guard must read a session rather than a memory flag.
+
+### ADR-009: live session state versus labelled sample data
+
+- Date: 2026-08-02
+- Status: accepted
+- Context: M1e found Today rendering the goal the user had just created *and* an unrelated fixture goal at the same time, and onboarding writing preferences that no screen read. Static milestones need invented data to show a designed screen, but a screen that mixes invented and real data is simply wrong, and the user cannot tell which is which.
+- Decision: draw the line per screen. Today renders only live session state — the created goal, with actions derived from it by `deriveActions` — and shows a reachable empty state when there is none. Insights and Profile keep their fixtures and must carry `SAMPLE_DATA_NOTE` from `constants/copy.ts` verbatim. Onboarding answers are read back on Profile so the flow visibly affects the app. Error states are declared in the state union but not rendered while no failure can occur: the shape is agreed now so the backend milestone implements one pattern, without shipping a branch nothing can reach.
+- Alternatives considered: wiring Insights and Profile to session state too — a just-created goal has no history, so both screens would be permanently empty and the design unreviewable; leaving Today mixed and documenting it — the defect this milestone existed to find; building a simulated failure toggle — dead UI in shipped code.
+- Consequences: Today shows no streak, because a session-only goal cannot have one; streaks live on Insights until persistence exists. Any new screen must choose a side of this line and say which. Every fixture-backed screen carries the same sentence, so the fiction is labelled identically everywhere.
+- Revisit when: persistence lands and real history exists, at which point the sample-data note and the derived actions are both replaced by server data.
+
+### ADR-010: removing the Expo template demo surface
+
+- Date: 2026-08-02
+- Status: accepted
+- Context: the SDK 54 template ships example screens and components. By M1d the app had replaced all of them, but the originals were still building and shipping, and ADR-004 had accepted them staying only "until those routes are replaced".
+- Decision: delete them, having verified zero inbound references: `external-link`, `hello-wave`, `parallax-scroll-view` and `ui/collapsible` (no importers); the `modal` route and its registration (unreachable — nothing navigated to it); then the cascade those four exclusively kept alive, `themed-text`, `themed-view`, `use-theme-color` and `constants/theme`; plus 4 unused React logo images. `use-color-scheme`, `icon-symbol` and `haptic-tab` are kept — they feed `use-theme` and six MAX primitives.
+- Alternatives considered: keeping them as reference — the template is a `git init` away and the code was actively misleading, since `constants/theme.ts` was a second colour system competing with the tokens.
+- Consequences: ADR-004's note about two text components coexisting is now resolved — `components/ui/text.tsx` is the only one. `expo-web-browser` and `expo-image` are left with no importer; removing them needs a `package.json` change, so it is deferred to M1f rather than smuggled into this milestone.
+- Revisit when: never for these files. The pattern — verify references, delete in dependency order, one commit — applies to future template removals.

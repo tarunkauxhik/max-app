@@ -10,12 +10,16 @@ export type EmptyStateProps = {
   body: string;
 };
 
+/**
+ * The icon is a neutral empty tray, not a checkmark: a tick means "done", which
+ * is the opposite of what an empty state is reporting.
+ */
 export function EmptyState({ title, body }: EmptyStateProps) {
   const colors = useTheme();
 
   return (
     <View style={styles.root}>
-      <IconSymbol name="checkmark.circle.fill" size={40} color={colors.textMuted} />
+      <IconSymbol name="tray" size={40} color={colors.textMuted} />
       <Text variant="heading">{title}</Text>
       <Text variant="body" tone="secondary" style={styles.body}>
         {body}

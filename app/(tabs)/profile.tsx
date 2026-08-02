@@ -5,7 +5,10 @@ import { Screen } from '@/components/ui/screen';
 import { SettingsRow } from '@/components/ui/settings-row';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Text } from '@/components/ui/text';
+import { SAMPLE_DATA_NOTE } from '@/constants/copy';
 import { Radii, Spacing } from '@/constants/tokens';
+import { useOnboarding } from '@/features/onboarding/state';
+import { commitmentLabel, interestLabel } from '@/features/onboarding/types';
 import { profileMock } from '@/features/profile/mock-data';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -56,6 +59,43 @@ function RowGroup({ rows }: { rows: PlaceholderRow[] }) {
   );
 }
 
+/**
+ * What onboarding collected, read back.
+ *
+ * This is the only place the answers surface, so it is what stops onboarding
+ * from being a form that goes nowhere. Rows are inert: nothing can be edited
+ * until there is somewhere to save it.
+ */
+function OnboardingSummary() {
+  const { preferences } = useOnboarding();
+
+  return (
+    <View style={styles.section}>
+      <Text variant="heading">From onboarding</Text>
+      <Card style={styles.list}>
+        {preferences === null ? (
+          <SettingsRow
+            label="Onboarding"
+            status="Skipped"
+            accessibilityHint="You can set these up later."
+          />
+        ) : (
+          <>
+            <SettingsRow
+              label="Interests"
+              value={preferences.interests.map(interestLabel).join(', ')}
+            />
+            <SettingsRow
+              label="Daily commitment"
+              value={commitmentLabel(preferences.commitment)}
+            />
+          </>
+        )}
+      </Card>
+    </View>
+  );
+}
+
 export default function ProfileScreen() {
   const colors = useTheme();
   const { name, initials, bio, achievements } = profileMock;
@@ -88,8 +128,13 @@ export default function ProfileScreen() {
           </View>
         </Card>
 
+        <OnboardingSummary />
+
         <Card>
           <Text variant="heading">Achievements</Text>
+          <Text variant="caption" tone="muted">
+            {SAMPLE_DATA_NOTE}
+          </Text>
           <View style={styles.tiles}>
             {achievements.map((achievement) => (
               <StatTile

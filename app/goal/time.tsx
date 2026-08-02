@@ -31,7 +31,9 @@ export default function GoalTimeScreen() {
     <Screen edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <ProgressBar value={2} max={4} label="Step 2 of 4" />
-        <Text variant="title">How much time do you have each day?</Text>
+        <Text variant="title" accessibilityRole="header">
+          How much time do you have each day?
+        </Text>
         <OptionGroup
           label="Daily time"
           options={MINUTES_OPTIONS}

@@ -34,7 +34,9 @@ export default function GoalNameScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
           <ProgressBar value={1} max={4} label="Step 1 of 4" />
-          <Text variant="title">What do you want to achieve?</Text>
+          <Text variant="title" accessibilityRole="header">
+            What do you want to achieve?
+          </Text>
           <TextField
             label="Goal"
             hint="Something specific you can act on every day."

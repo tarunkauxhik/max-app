@@ -3,37 +3,13 @@ import { StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { SummaryRow } from '@/components/ui/summary-row';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/tokens';
 import { OnboardingStep } from '@/features/onboarding/onboarding-step';
 import { useOnboarding, useOnboardingDraft } from '@/features/onboarding/state';
 import { commitmentLabel, interestLabel } from '@/features/onboarding/types';
 import { useTheme } from '@/hooks/use-theme';
-
-type SummaryRowProps = {
-  label: string;
-  value: string;
-  editHref: '/onboarding/interests' | '/onboarding/commitment';
-};
-
-function SummaryRow({ label, value, editHref }: SummaryRowProps) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowCopy}>
-        <Text variant="caption" tone="muted">
-          {label}
-        </Text>
-        <Text variant="body">{value}</Text>
-      </View>
-      <Button
-        label="Edit"
-        variant="ghost"
-        accessibilityLabel={`Edit ${label.toLowerCase()}`}
-        onPress={() => router.dismissTo(editHref)}
-      />
-    </View>
-  );
-}
 
 export default function OnboardingReviewScreen() {
   const colors = useTheme();
@@ -103,16 +79,6 @@ const styles = StyleSheet.create({
   },
   summary: {
     gap: 0,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  rowCopy: {
-    flex: 1,
-    gap: Spacing.xxs,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

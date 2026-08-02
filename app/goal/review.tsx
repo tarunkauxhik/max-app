@@ -5,36 +5,12 @@ import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ProgressBar } from '@/components/ui/progress-bar';
 import { Screen } from '@/components/ui/screen';
+import { SummaryRow } from '@/components/ui/summary-row';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/tokens';
 import { useGoalDraft, useSessionGoal } from '@/features/goals/state';
 import { difficultyLabel, validateTitle } from '@/features/goals/types';
 import { useTheme } from '@/hooks/use-theme';
-
-type SummaryRowProps = {
-  label: string;
-  value: string;
-  editHref: '/goal/name' | '/goal/time' | '/goal/plan';
-};
-
-function SummaryRow({ label, value, editHref }: SummaryRowProps) {
-  return (
-    <View style={styles.row}>
-      <View style={styles.rowCopy}>
-        <Text variant="caption" tone="muted">
-          {label}
-        </Text>
-        <Text variant="body">{value}</Text>
-      </View>
-      <Button
-        label="Edit"
-        variant="ghost"
-        accessibilityLabel={`Edit ${label.toLowerCase()}`}
-        onPress={() => router.dismissTo(editHref)}
-      />
-    </View>
-  );
-}
 
 export default function GoalReviewScreen() {
   const colors = useTheme();
@@ -65,7 +41,9 @@ export default function GoalReviewScreen() {
     <Screen edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <ProgressBar value={4} max={4} label="Step 4 of 4" />
-        <Text variant="title">Does this look right?</Text>
+        <Text variant="title" accessibilityRole="header">
+          Does this look right?
+        </Text>
 
         <Card style={styles.summary}>
           <SummaryRow label="Goal" value={draft.title.trim() || 'Not set'} editHref="/goal/name" />
@@ -119,16 +97,6 @@ const styles = StyleSheet.create({
   },
   summary: {
     gap: 0,
-  },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: Spacing.md,
-    paddingVertical: Spacing.sm,
-  },
-  rowCopy: {
-    flex: 1,
-    gap: Spacing.xxs,
   },
   divider: {
     height: StyleSheet.hairlineWidth,

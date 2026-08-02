@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Text } from '@/components/ui/text';
 import { WeekBars } from '@/components/ui/week-bars';
+import { SAMPLE_DATA_NOTE } from '@/constants/copy';
 import { Spacing } from '@/constants/tokens';
 import { completeDayCount, type InsightsSnapshot } from '@/features/insights/mock-data';
 import { useInsights } from '@/features/insights/use-insights';
@@ -137,9 +138,17 @@ export default function InsightsScreen() {
           <Text variant="caption" tone="muted">
             Your last seven days
           </Text>
+          <Text variant="caption" tone="muted">
+            {SAMPLE_DATA_NOTE}
+          </Text>
         </View>
 
-        {state.status === 'loading' ? <InsightsLoading /> : <InsightsContent data={state.data} />}
+        {/*
+          `error` is part of InsightsState but cannot occur while the data is a
+          local fixture, so no retry branch ships yet. The backend milestone adds
+          it here — see the state union in use-insights.ts.
+        */}
+        {state.status === 'ready' ? <InsightsContent data={state.data} /> : <InsightsLoading />}
       </ScrollView>
     </Screen>
   );

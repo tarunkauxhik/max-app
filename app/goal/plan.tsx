@@ -32,7 +32,9 @@ export default function GoalPlanScreen() {
     <Screen edges={['left', 'right', 'bottom']}>
       <ScrollView contentContainerStyle={styles.content}>
         <ProgressBar value={3} max={4} label="Step 3 of 4" />
-        <Text variant="title">How long, and how hard?</Text>
+        <Text variant="title" accessibilityRole="header">
+          How long, and how hard?
+        </Text>
 
         <OptionGroup
           label="Duration"

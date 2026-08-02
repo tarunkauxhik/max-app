@@ -30,7 +30,6 @@ function RootStack() {
       <Stack.Protected guard={completed}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="goal" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
       </Stack.Protected>
     </Stack>
   );

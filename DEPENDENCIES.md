@@ -25,6 +25,8 @@ Exact versions come from the generated Expo SDK project and its lockfile.
 | M1a design foundation | none | none | Built entirely on already-installed packages. |
 | M1b static goal creation | none | none | Built on already-installed packages. |
 | M1c static onboarding | none | none | Built on already-installed packages. |
+| M1d static Insights and Profile | none | none | Built on already-installed packages. |
+| M1e integration and UX audit | none | none | Deletions only. See the orphan note below. |
 
 M1a used only `react-native`, `react-native-safe-area-context` and `@expo/vector-icons`.
 `package.json`, `pnpm-lock.yaml` and `app.json` were unchanged, no `android/` or `ios/`
@@ -32,7 +34,21 @@ directory was generated, and Expo Go compatibility was preserved.
 
 M1b and M1c also added no packages. Commits `56a4c0a` and `91c6404` leave `package.json`,
 `pnpm-lock.yaml` and `app.json` untouched, generate no `android/` or `ios/` directory, and
-preserve Expo Go compatibility.
+preserve Expo Go compatibility. M1d and M1e held the same constraints.
+
+### Orphaned by M1e
+
+Removing the Expo demo surface (ADR-010) left two packages with no importer:
+
+| Package | Was used by | Status |
+|---|---|---|
+| `expo-web-browser` | `components/external-link.tsx` | orphaned, still installed |
+| `expo-image` | `components/parallax-scroll-view.tsx` | orphaned, still installed |
+
+They are deliberately **not** removed here: uninstalling edits `package.json` and
+`pnpm-lock.yaml`, which M1e was scoped out of. Verify both are still unreferenced before
+removing them in M1f — `expo-image` in particular is the recommended image component and is
+likely to be wanted again when proof images arrive.
 
 ## Required review for additions
 

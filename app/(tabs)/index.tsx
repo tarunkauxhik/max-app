@@ -12,13 +12,12 @@ import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/tokens';
 import { useSessionGoal } from '@/features/goals/state';
 import { difficultyLabel } from '@/features/goals/types';
-import { todayMock } from '@/features/today/mock-data';
+import { deriveActions } from '@/features/today/actions';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function TodayScreen() {
   const colors = useTheme();
   const { goal, clearGoal } = useSessionGoal();
-  const { goalTitle, streakDays, actions } = todayMock;
 
   const [completedIds, setCompletedIds] = useState<string[]>([]);
   const [checkedIn, setCheckedIn] = useState(false);
@@ -30,6 +29,13 @@ export default function TodayScreen() {
     );
   }, []);
 
+  const handleClear = useCallback(() => {
+    // Progress belongs to the goal that produced it.
+    setCompletedIds([]);
+    setCheckedIn(false);
+    clearGoal();
+  }, [clearGoal]);
+
   const today = useMemo(
     () =>
       new Date().toLocaleDateString(undefined, {
@@ -40,6 +46,8 @@ export default function TodayScreen() {
     []
   );
 
+  const actions = useMemo(() => (goal ? deriveActions(goal) : []), [goal]);
+
   const completed = completedIds.length;
   const total = actions.length;
   const allComplete = total > 0 && completed === total;
@@ -48,49 +56,35 @@ export default function TodayScreen() {
     <Screen>
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <Text variant="display">Today</Text>
+          <Text variant="display" accessibilityRole="header">
+            Today
+          </Text>
           <Text variant="caption" tone="muted">
             {today}
           </Text>
         </View>
 
-        {goal ? (
-          <Card>
-            <Text variant="caption" tone="muted">
-              Created this session
-            </Text>
-            <Text variant="heading">{goal.title}</Text>
-            <Text variant="body" tone="secondary">
-              {goal.minutesPerDay} minutes a day, {goal.durationWeeks} weeks,{' '}
-              {difficultyLabel(goal.difficulty).toLowerCase()} pace
-            </Text>
-            <Button label="Clear" variant="ghost" onPress={clearGoal} />
-          </Card>
-        ) : (
-          <Button
-            label="Create a goal"
-            variant="secondary"
-            onPress={() => router.push('/goal/name')}
-          />
-        )}
-
-        {total === 0 ? (
-          <EmptyState
-            title="Nothing planned yet"
-            body="When you add a goal, today's actions will appear here."
-          />
+        {goal === null ? (
+          <View style={styles.section}>
+            <EmptyState
+              title="Nothing planned yet"
+              body="Create a goal and today's actions will appear here."
+            />
+            <Button label="Create a goal" onPress={() => router.push('/goal/name')} />
+          </View>
         ) : (
           <>
             <Card>
-              <Text variant="heading">{goalTitle}</Text>
+              <Text variant="heading">{goal.title}</Text>
+              <Text variant="body" tone="secondary">
+                {goal.minutesPerDay} minutes a day, {goal.durationWeeks} weeks,{' '}
+                {difficultyLabel(goal.difficulty).toLowerCase()} pace
+              </Text>
               <ProgressBar
                 value={completed}
                 max={total}
                 label={`${completed} of ${total} actions complete`}
               />
-              <Text variant="caption" tone="streak">
-                {streakDays}-day streak
-              </Text>
             </Card>
 
             <View style={styles.section}>
@@ -127,6 +121,8 @@ export default function TodayScreen() {
                 </Text>
               ) : null}
             </View>
+
+            <Button label="Clear goal" variant="ghost" onPress={handleClear} />
           </>
         )}
       </ScrollView>

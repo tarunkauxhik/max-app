@@ -80,9 +80,9 @@ Found and fixed during device testing: the flow opened on step 4 of 4 and Back t
 Intentional limitation: onboarding completion is held in memory only, so a full reload shows
 onboarding again. See ADR-005 and ADR-007.
 
-## M1d: static Insights and Profile — in progress
+## M1d: static Insights and Profile — complete (2026-08-02)
 
-Implemented; not yet device-verified and not yet committed.
+Delivered:
 
 - Insights: weekly bars, streak tiles, goal progress, recent check-ins, with loading and
   empty states.
@@ -91,11 +91,42 @@ Implemented; not yet device-verified and not yet committed.
 - Rows without a handler render as non-interactive text with a visible "Coming later" status,
   rather than as buttons that do nothing.
 
+Verified: Android physical-device pass in Expo Go; strict TypeScript and lint pass.
+
+## M1e: static integration and UX audit — in progress
+
+The first milestone to treat the app as one product rather than four screens. Implemented;
+pending Android device verification.
+
+Delivered:
+
+- Today renders the goal the user actually created, with actions derived from it, and falls
+  back to a reachable empty state when there is none. It previously showed the new goal and an
+  unrelated fixture goal side by side.
+- Onboarding answers are read back on Profile, so the flow no longer collects input that
+  nothing consumes.
+- Insights and Profile label their fixtures as sample data; Today does not, because it is now
+  live session state. See ADR-009.
+- `SummaryRow` extracted and shared by both review screens.
+- `error` added to the Insights state union as the agreed shape, without shipping an
+  unreachable retry branch. See ADR-009.
+- Header roles on the Today and goal-step titles; the empty state uses a neutral tray icon
+  rather than a checkmark.
+- The Expo demo surface removed: 4 unreferenced components, the unreachable `modal` route,
+  their private dependency cluster and 4 unused images. See ADR-010.
+
+Constraints held: no dependencies added; `package.json`, `pnpm-lock.yaml` and `app.json`
+unchanged.
+
 Remaining: Android physical-device pass, then commit.
 
-## M1e: remaining design-foundation work
+## M1f: remaining design-foundation work
 
-- iPhone Expo Go review when a device is available.
+- iPhone Expo Go review when a device is available. The highest-value check is SF Symbols:
+  `icon-symbol.ios.tsx` passes names straight to `SymbolView`, which renders blank rather than
+  failing when a name is wrong.
+- Prune the packages the demo removal orphaned (`expo-web-browser`, `expo-image`), which needs
+  a `package.json` change and its own approval.
 
 ## M2: navigation and static flows
 
