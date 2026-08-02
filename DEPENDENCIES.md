@@ -11,9 +11,9 @@ Exact versions come from the generated Expo SDK project and its lockfile.
 | Expo + React Native + TypeScript | App framework | approved |
 | Expo Router | Navigation | approved |
 | Official Expo SDK libraries | Device/UI capabilities | add only when needed |
-| Supabase JS | Backend client | pending M4 — service provisioned, package not yet installed |
+| Supabase JS | Backend client | **approved 2026-08-02** (M4). See below |
 | TanStack Query | Server-state cache | pending data milestone |
-| Expo SQLite | Persistent cache/offline data | pending cache milestone |
+| Expo SQLite | Persistent cache/offline data | **approved 2026-08-02** (M4, ahead of the cache milestone). See below |
 | Zod | Boundary validation | pending first validated boundary |
 | React Hook Form | Complex forms | pending form complexity |
 
@@ -28,6 +28,7 @@ Exact versions come from the generated Expo SDK project and its lockfile.
 | M1d static Insights and Profile | none | none | Built on already-installed packages. |
 | M1e integration and UX audit | none | none | Deletions only. See the orphan note below. |
 | M3 schema and RLS | `supabase@2.110.0` (dev) | none | CLI only. Never bundled. See below. |
+| M4 email authentication | `@supabase/supabase-js@^2.111.0`, `expo-sqlite@~16.0.10` | none | First runtime packages added since M0. Both ship in Expo Go. See below. |
 
 M1a used only `react-native`, `react-native-safe-area-context` and `@expo/vector-icons`.
 `package.json`, `pnpm-lock.yaml` and `app.json` were unchanged, no `android/` or `ios/`
@@ -85,6 +86,56 @@ that verifies the schema should be the version recorded alongside it.
 
 `supabase init` also created `supabase/config.toml` and `supabase/.gitignore`. Neither excludes
 the migrations or tests, which was checked rather than assumed.
+
+## Runtime packages — approved 2026-08-02 (M4)
+
+The first packages added to the running app since the M0 template. Installed with
+`pnpm exec expo install @supabase/supabase-js expo-sqlite`, so the SDK 54 compatible releases were
+chosen rather than merely the newest.
+
+### `@supabase/supabase-js`
+
+| Field | Value |
+|---|---|
+| Version | `^2.111.0`, resolved to 2.111.0 |
+| Requirement | Sign-up, sign-in, sign-out and session refresh against `max-dev`. Nothing in Expo SDK 54 speaks to Supabase Auth |
+| No-package alternative | Hand-written `fetch` calls to the GoTrue REST endpoints. Rejected: it would mean reimplementing token refresh, expiry handling and storage adapters, which is the majority of what this package is |
+| Sources checked | npm registry metadata and the installed `package.json`; Expo's own Supabase guide for SDK 54 — 2026-08-02 |
+| Compatibility | Pure JavaScript, **no native module**. Works in Expo Go with no config plugin and no prebuild. `engines: node >=22.0.0`; the project runs 24.18.1 |
+| Native/paid | None. `max-dev` is on the Supabase Free plan |
+| Maintenance | Actively released; 2.111.0 was the current release at install time |
+| License | MIT |
+| Secrets | Reads `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` only, both of which are safe in a client bundle by design. `lib/supabase.ts` throws at module load if the key is missing or carries the `sb_secret_` prefix. See SECURITY.md |
+| Bundle impact | The only new runtime JavaScript of consequence in M4. It ships the string `sb_secret_` itself inside `isNewApiKey`, which is a known false positive when grepping a bundle — see LEARNINGS |
+| Rollback | `pnpm remove @supabase/supabase-js`, delete `lib/supabase.ts` and `features/auth/`, and revert the gating in `app/_layout.tsx` |
+
+### `expo-sqlite`
+
+| Field | Value |
+|---|---|
+| Version | `~16.0.10`, resolved to 16.0.10 |
+| Requirement | A storage adapter for the Supabase session, so a signed-in user is still signed in after a force-quit. Also the per-account onboarding flag |
+| No-package alternative | None workable. React Native ships no persistent key–value store, and Supabase's `persistSession` needs one; without it every launch starts signed out |
+| Sources checked | `docs.expo.dev/versions/v54.0.0/sdk/sqlite`, plus the installed export map and config-plugin types — 2026-08-02 |
+| Compatibility | First-party Expo SDK module, **bundled into Expo Go**. Pinned by `expo install` to the SDK 54 release, deliberately not the newer 57.x that targets a later SDK |
+| Native/paid | No prebuild needed for what is used here. `expo install` added a bare `"expo-sqlite"` entry to `app.json`; its config plugin accepts only native build flags — `customBuildFlags`, `enableFTS`, `useSQLCipher`, `useLibSQL`, `withSQLiteVecExtension` — none of which are passed, so the entry is inert in Expo Go. Verified against `plugin/build/withSQLite.d.ts` |
+| Maintenance | First-party, released on the Expo SDK cadence |
+| License | MIT |
+| Secrets | **Stores the Supabase refresh token unencrypted at rest**, in app-private storage. `useSQLCipher` would encrypt it but is a native build flag, so it is unavailable until a development build exists. See ADR-013 and SECURITY.md |
+| Storage impact | One small SQLite file. The session is a few kilobytes; the onboarding record is under 200 bytes per account |
+| Rollback | `pnpm remove expo-sqlite`, remove the `app.json` plugin entry, and delete `features/onboarding/storage.ts`. Sessions then stop surviving a restart |
+
+**Two subpaths, and only one of them is typed.** The code imports `expo-sqlite/kv-store`, not the
+`expo-sqlite/localStorage/install` shim Expo's Supabase guide shows. `kv-store` declares both
+`default` and `types` in its export map; `localStorage/install` declares only `default`. The shim
+route still typechecks, but its types come from the wrong place: the module itself contributes none,
+and the global `localStorage` it installs is described by the DOM `Storage` interface that
+`expo/tsconfig.base` pulls in. That happens to be structurally compatible with what Supabase wants,
+so nothing complains — but the guarantee is a browser type definition in a React Native app, not
+anything `expo-sqlite` ships. See ADR-013.
+
+**This satisfies M6 too.** DEPENDENCIES previously listed Expo SQLite as pending the cache milestone.
+It is now installed, so M6 adds no storage package — it reuses this one.
 
 ## Required review for additions
 
