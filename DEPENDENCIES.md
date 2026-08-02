@@ -23,10 +23,16 @@ Exact versions come from the generated Expo SDK project and its lockfile.
 |---|---|---|---|
 | M0 baseline | Expo SDK 54 template set | none | Exact versions fixed by `pnpm-lock.yaml`. |
 | M1a design foundation | none | none | Built entirely on already-installed packages. |
+| M1b static goal creation | none | none | Built on already-installed packages. |
+| M1c static onboarding | none | none | Built on already-installed packages. |
 
 M1a used only `react-native`, `react-native-safe-area-context` and `@expo/vector-icons`.
 `package.json`, `pnpm-lock.yaml` and `app.json` were unchanged, no `android/` or `ios/`
 directory was generated, and Expo Go compatibility was preserved.
+
+M1b and M1c also added no packages. Commits `56a4c0a` and `91c6404` leave `package.json`,
+`pnpm-lock.yaml` and `app.json` untouched, generate no `android/` or `ios/` directory, and
+preserve Expo Go compatibility.
 
 ## Required review for additions
 
