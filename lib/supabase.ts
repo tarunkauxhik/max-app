@@ -2,6 +2,8 @@ import { createClient } from '@supabase/supabase-js';
 import Storage from 'expo-sqlite/kv-store';
 import { AppState } from 'react-native';
 
+import type { Database } from '@/lib/database.types';
+
 /**
  * The Supabase client, and the only place credentials are read.
  *
@@ -61,7 +63,16 @@ if (!supabasePublishableKey.startsWith('sb_publishable_')) {
   );
 }
 
-export const supabase = createClient(supabaseUrl, supabasePublishableKey, {
+/**
+ * Typed against the generated schema, so a wrong column name is a compile error
+ * rather than a 400 at runtime.
+ *
+ * One limit worth knowing: `lib/database.types.ts` describes *columns*, not
+ * *grants*. `Insert` on `goal_actions` lists `completed_at` even though the
+ * client holds no insert privilege on it. TypeScript will not stop that write —
+ * Postgres will. The types remove typos, not authorization mistakes.
+ */
+export const supabase = createClient<Database>(supabaseUrl, supabasePublishableKey, {
   auth: {
     storage: Storage,
     autoRefreshToken: true,
