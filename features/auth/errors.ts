@@ -16,7 +16,12 @@ const MESSAGES: Record<string, string> = {
   // Sign in
   invalid_credentials: 'That email and password do not match. Check both and try again.',
   email_not_confirmed: 'Confirm your email address first. Check your inbox for the link.',
-  user_not_found: 'No account uses that email address.',
+  // Deliberately identical to `invalid_credentials`. A distinct "no account uses
+  // that email" message would let anyone test an address for membership one
+  // request at a time. Supabase returns `invalid_credentials` for an unknown
+  // email today, so this is unreachable from sign-in — but a password-reset flow
+  // would reach it, and the message should already be safe when it does.
+  user_not_found: 'That email and password do not match. Check both and try again.',
   user_banned: 'This account has been suspended.',
 
   // Sign up
