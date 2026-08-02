@@ -1,4 +1,5 @@
-import { ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
@@ -7,6 +8,7 @@ import { StatTile } from '@/components/ui/stat-tile';
 import { Text } from '@/components/ui/text';
 import { SAMPLE_DATA_NOTE } from '@/constants/copy';
 import { Radii, Spacing } from '@/constants/tokens';
+import { useAuth } from '@/features/auth/state';
 import { useOnboarding } from '@/features/onboarding/state';
 import { commitmentLabel, interestLabel } from '@/features/onboarding/types';
 import { profileMock } from '@/features/profile/mock-data';
@@ -38,6 +40,97 @@ const PRIVACY: PlaceholderRow[] = [
 ];
 
 const PLACEHOLDER_HINT = 'Not available in this preview.';
+
+/**
+ * The first control on this screen that does something.
+ *
+ * Confirmed before acting: signing out is not destructive, but it is a full
+ * context switch reached from a scrolling list, so a mis-tap should not end the
+ * session. No navigation happens here — the route guard in `app/_layout.tsx`
+ * watches the session and unmounts this tree, per ADR-008.
+ */
+function SignOutRow() {
+  const { signOut, user } = useAuth();
+  const [busy, setBusy] = useState(false);
+
+  function confirm() {
+    if (busy) {
+      return;
+    }
+
+    Alert.alert('Sign out?', user?.email ? `You are signed in as ${user.email}.` : undefined, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Sign out',
+        style: 'destructive',
+        onPress: () => {
+          setBusy(true);
+          void signOut().then((result) => {
+            if (!result.ok) {
+              // Only reachable if the network call fails. The local session is
+              // cleared regardless, so the guard still moves the user out; this
+              // reports why the server was not told.
+              setBusy(false);
+              Alert.alert('Sign out', result.message);
+            }
+          });
+        },
+      },
+    ]);
+  }
+
+  return (
+    <SettingsRow
+      label="Sign out"
+      status={busy ? 'Signing out…' : undefined}
+      onPress={confirm}
+      accessibilityHint="Ends your session and returns to the sign-in screen"
+    />
+  );
+}
+
+/**
+ * The signed-in account, shown for real.
+ *
+ * This replaced a fixture name, initials and bio. Once M4 gave the app a
+ * genuine identity, presenting an invented one became exactly the kind of
+ * misleading placeholder ADR-009 and ADR-010 set out to remove — worse than a
+ * blank, because it looks like data.
+ *
+ * `display_name` exists on the `profiles` row but nothing reads it until M5, so
+ * the email stands in and the caption says so rather than implying the name is
+ * simply missing.
+ */
+function Identity() {
+  const colors = useTheme();
+  const { user } = useAuth();
+
+  const email = user?.email ?? '';
+  // Local part only: an avatar showing the domain would be the same two letters
+  // for everyone on a shared provider.
+  const initials = email.slice(0, 2).toUpperCase() || '?';
+
+  return (
+    <Card>
+      <View style={styles.identity}>
+        <View
+          style={[styles.avatar, { backgroundColor: colors.primary }]}
+          importantForAccessibility="no-hide-descendants"
+          accessibilityElementsHidden>
+          <Text variant="heading" tone="onPrimary">
+            {initials}
+          </Text>
+        </View>
+        <View style={styles.identityCopy}>
+          <Text variant="heading">{email}</Text>
+          <Text variant="caption" tone="secondary">
+            Display name and bio arrive in a later update.
+          </Text>
+        </View>
+      </View>
+    </Card>
+  );
+}
 
 function RowGroup({ rows }: { rows: PlaceholderRow[] }) {
   const colors = useTheme();
@@ -98,7 +191,7 @@ function OnboardingSummary() {
 
 export default function ProfileScreen() {
   const colors = useTheme();
-  const { name, initials, bio, achievements } = profileMock;
+  const { achievements } = profileMock;
 
   return (
     <Screen>
@@ -109,24 +202,7 @@ export default function ProfileScreen() {
           </Text>
         </View>
 
-        <Card>
-          <View style={styles.identity}>
-            <View
-              style={[styles.avatar, { backgroundColor: colors.primary }]}
-              importantForAccessibility="no-hide-descendants"
-              accessibilityElementsHidden>
-              <Text variant="heading" tone="onPrimary">
-                {initials}
-              </Text>
-            </View>
-            <View style={styles.identityCopy}>
-              <Text variant="heading">{name}</Text>
-              <Text variant="caption" tone="secondary">
-                {bio}
-              </Text>
-            </View>
-          </View>
-        </Card>
+        <Identity />
 
         <OnboardingSummary />
 
@@ -167,11 +243,7 @@ export default function ProfileScreen() {
         <View style={styles.section}>
           <Text variant="heading">Account</Text>
           <Card style={styles.list}>
-            <SettingsRow
-              label="Sign out"
-              status="Coming later"
-              accessibilityHint={PLACEHOLDER_HINT}
-            />
+            <SignOutRow />
           </Card>
         </View>
 

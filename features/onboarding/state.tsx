@@ -1,5 +1,12 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { useAuth } from '@/features/auth/state';
+import {
+  EMPTY_ONBOARDING_RECORD,
+  readOnboarding,
+  writeOnboarding,
+  type OnboardingRecord,
+} from '@/features/onboarding/storage';
 import {
   EMPTY_ONBOARDING_DRAFT,
   MAX_INTERESTS,
@@ -74,34 +81,71 @@ const OnboardingContext = createContext<OnboardingValue | null>(null);
 
 /**
  * Whether onboarding has been passed, held at the root so the route guard can
- * read it. Memory only: reloading shows onboarding again, per ADR-005.
+ * read it.
+ *
+ * Persisted per account since M4 — see `features/onboarding/storage.ts` for why
+ * this one flag stopped being memory-only while the rest of ADR-005 stands.
  */
 export function OnboardingProvider({ children }: { children: ReactNode }) {
-  const [completed, setCompleted] = useState(false);
-  const [preferences, setPreferences] = useState<OnboardingPreferences | null>(null);
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
 
-  const complete = useCallback((draft: OnboardingDraft) => {
-    // Narrowing guard: the review step blocks confirmation until these are set.
-    if (draft.commitment === null || draft.interests.length === 0) {
-      return;
-    }
+  const [record, setRecord] = useState<OnboardingRecord>(EMPTY_ONBOARDING_RECORD);
+  const [loadedFor, setLoadedFor] = useState<string | null>(null);
 
-    setPreferences({
-      interests: draft.interests,
-      commitment: draft.commitment,
-      completedAt: new Date().toISOString(),
-    });
-    setCompleted(true);
-  }, []);
+  // Adjusted during render rather than in an effect. Reads are synchronous, so
+  // there is no asynchronous gap to cover, and React re-runs this component
+  // before committing — meaning the route guard below never sees a frame where
+  // the account has changed but its onboarding state has not. An effect would
+  // render one frame of the previous account's answers first.
+  if (loadedFor !== userId) {
+    setLoadedFor(userId);
+    setRecord(userId ? readOnboarding(userId) : EMPTY_ONBOARDING_RECORD);
+  }
+
+  const persist = useCallback(
+    (next: OnboardingRecord) => {
+      setRecord(next);
+      // Signed-out is not a state onboarding can be completed from, but the
+      // guard keeps the write honest rather than relying on that.
+      if (userId) {
+        writeOnboarding(userId, next);
+      }
+    },
+    [userId]
+  );
+
+  const complete = useCallback(
+    (draft: OnboardingDraft) => {
+      // Narrowing guard: the review step blocks confirmation until these are set.
+      if (draft.commitment === null || draft.interests.length === 0) {
+        return;
+      }
+
+      persist({
+        completed: true,
+        preferences: {
+          interests: draft.interests,
+          commitment: draft.commitment,
+          completedAt: new Date().toISOString(),
+        },
+      });
+    },
+    [persist]
+  );
 
   const skip = useCallback(() => {
-    setPreferences(null);
-    setCompleted(true);
-  }, []);
+    persist({ completed: true, preferences: null });
+  }, [persist]);
 
   const value = useMemo(
-    () => ({ completed, preferences, complete, skip }),
-    [completed, preferences, complete, skip]
+    () => ({
+      completed: record.completed,
+      preferences: record.preferences,
+      complete,
+      skip,
+    }),
+    [record, complete, skip]
   );
 
   return <OnboardingContext.Provider value={value}>{children}</OnboardingContext.Provider>;

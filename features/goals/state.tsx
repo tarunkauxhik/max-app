@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
+import { useAuth } from '@/features/auth/state';
 import { EMPTY_DRAFT, type GoalDraft, type LocalGoal } from '@/features/goals/types';
 
 type GoalDraftValue = {
@@ -50,9 +51,27 @@ const SessionGoalContext = createContext<SessionGoalValue | null>(null);
 /**
  * Holds the confirmed goal at the root so it outlives the creation flow.
  * Memory only: reloading the app clears it, per ADR-005.
+ *
+ * Mounted above the session gate, so unlike the tab tree it is *not* unmounted
+ * when someone signs out. That makes clearing on account change this provider's
+ * responsibility rather than the sign-out button's — the goal must not survive
+ * into a different account on a shared device, and it must not survive a
+ * session that ended without anyone pressing anything, such as an expired
+ * refresh token.
  */
 export function SessionGoalProvider({ children }: { children: ReactNode }) {
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
+
   const [goal, setGoal] = useState<LocalGoal | null>(null);
+  const [ownedBy, setOwnedBy] = useState<string | null>(null);
+
+  // Adjusted during render, so no frame exists in which the previous account's
+  // goal is visible to the next one. An effect would render that frame first.
+  if (ownedBy !== userId) {
+    setOwnedBy(userId);
+    setGoal(null);
+  }
 
   const saveGoal = useCallback((draft: GoalDraft) => {
     // Narrowing guard: the review step blocks confirmation until these are set.

@@ -41,13 +41,24 @@ function RootStack() {
     return null;
   }
 
+  // Three gates in sequence: session, then onboarding, then the app. Each tree
+  // is not merely hidden but unmounted, which is what makes hardware back
+  // behave — on the first screen of a gate there is nothing behind it to
+  // reveal, so back exits rather than leaking the previous stage.
+  //
+  // Signing out flips `status` and the whole authenticated tree unmounts, so
+  // there is no path that leaves a stale screen holding another account's data.
   return (
     <Stack>
-      <Stack.Protected guard={!completed}>
+      <Stack.Protected guard={status === 'signed-out'}>
+        <Stack.Screen name="(auth)" options={{ headerShown: false }} />
+      </Stack.Protected>
+
+      <Stack.Protected guard={status === 'signed-in' && !completed}>
         <Stack.Screen name="onboarding" options={{ headerShown: false }} />
       </Stack.Protected>
 
-      <Stack.Protected guard={completed}>
+      <Stack.Protected guard={status === 'signed-in' && completed}>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="goal" options={{ headerShown: false }} />
       </Stack.Protected>
