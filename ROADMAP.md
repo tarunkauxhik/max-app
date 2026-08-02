@@ -93,10 +93,9 @@ Delivered:
 
 Verified: Android physical-device pass in Expo Go; strict TypeScript and lint pass.
 
-## M1e: static integration and UX audit — in progress
+## M1e: static integration and UX audit — complete (2026-08-02)
 
-The first milestone to treat the app as one product rather than four screens. Implemented;
-pending Android device verification.
+The first milestone to treat the app as one product rather than four screens.
 
 Delivered:
 
@@ -118,23 +117,85 @@ Delivered:
 Constraints held: no dependencies added; `package.json`, `pnpm-lock.yaml` and `app.json`
 unchanged.
 
-Remaining: Android physical-device pass, then commit.
+Verified: Android physical-device pass in Expo Go; strict TypeScript and lint pass. Committed as
+`b12c822`.
 
-## M1f: remaining design-foundation work
+## M2: Supabase account and development project — complete (2026-08-02)
+
+Formerly tracked as M2a/M2b. Trusted Supabase skills installed; `max-dev` created on the Free
+plan in South Asia (Mumbai) `ap-south-1`, development only. See ADR-011 and
+EXTERNAL_SETUP_TRACKER.
+
+Note on numbering: an earlier revision folded schema work into M2 as M2a–M2e. That has been
+reconciled to the M1–M11 scheme below. Nothing was dropped — the old M2c and M2d are now M3, and
+the old M2e is split across M4 and M5.
+
+## M3: database schema and RLS — complete (2026-08-02)
+
+Formerly M2c and M2d.
+
+Design **complete (2026-08-02)**: four tables — `profiles`, `goals`, `goal_actions`, `check_ins` —
+with dated actions, composite-FK ownership, column-level grants and nothing derivable stored.
+See ADR-012.
+
+Applied and verified on `max-dev` (2026-08-02):
+
+- 5 migrations applied; migration history confirms local and remote agree.
+- 4 tables, RLS enabled on all 4, 13 policies, 5 functions, 5 triggers, signup trigger present.
+- `anon` holds zero privileges. `authenticated` holds SELECT on all four tables, DELETE on
+  `goal_actions` and `check_ins` only, and UPDATE on exactly the 20 intended columns.
+- Zero updatable `id`, `user_id`, `created_at` or `updated_at` columns.
+
+**Defect found and fixed during verification:** the first four migrations left `authenticated`
+with ALL privileges on every table, because Supabase's default privileges grant ALL on new tables
+in `public` and the migration revoked only from `public` and `anon`. Migration
+`20260802100400` corrects it. RLS was never bypassed. See LEARNINGS.
+
+**Tested (2026-08-02): 170 of 170 pgTAP assertions pass across 9 files**, run against `max-dev` with
+`supabase test db --linked`. Coverage: schema structure, policy shape, anonymous refusal, two-user
+isolation, constraints and triggers, account deletion, the signup trigger, and column and function
+privileges.
+
+Two harness defects were found and fixed by that first run. Neither was a schema defect — the schema
+passed unchanged:
+
+- Remote runs connect as `cli_login_postgres`, which holds no CREATE on the database and no USAGE on
+  `extensions`, so all 9 files failed before their first assertion. Fixed with `set role postgres`
+  and an explicit `search_path`.
+- All 27 `throws_ok` calls used the three-argument form, which reads as `(sql, errcode, errmsg)`
+  rather than `(sql, errcode, description)`. Every one asserted its own description against the real
+  Postgres error text. Fixed to the four-argument form, and proven non-vacuous by a negative control.
+
+See LEARNINGS.
+
+## M4: email authentication
+
+Real sign-up and sign-in screens, session handling, and the error and retry states whose shape
+ADR-009 already fixed. Replaces the "auth screens without backend" idea, which stopped making
+sense once a real backend existed.
+
+## M5: real goals, tasks and check-ins
+
+Replace the session-only state (ADR-005, ADR-007) and the labelled sample data (ADR-009) with
+live queries. Generated database types committed.
+
+## M6: caching and offline handling
+
+## M7: optional images
+
+## M8: AI features
+
+## M9: private squads
+
+## M10: development build and notifications
+
+## M11: shareable Android APK
+
+## Deferred
 
 - iPhone Expo Go review when a device is available. The highest-value check is SF Symbols:
   `icon-symbol.ios.tsx` passes names straight to `SymbolView`, which renders blank rather than
   failing when a name is wrong.
-- Prune the packages the demo removal orphaned (`expo-web-browser`, `expo-image`), which needs
-  a `package.json` change and its own approval.
+- Prune the packages the M1e demo removal orphaned (`expo-web-browser`, `expo-image`).
 
-## M2: navigation and static flows
-
-Onboarding and goal creation shipped early, in M1c and M1b. Remaining:
-
-- Auth screens without backend.
-- Error and retry states for the flows that will later call a backend.
-
-## M3+: just-in-time planning
-
-Backend, persistence, auth, caching, AI, images, reminders, squads and native builds are planned only when the preceding milestone is verified.
+M6 onward are planned just in time, only when the preceding milestone is verified.
