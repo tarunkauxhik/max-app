@@ -27,8 +27,10 @@ const MESSAGES: Record<string, string> = {
   email_address_invalid: 'That does not look like a valid email address.',
   email_address_not_authorized: 'That email address is not permitted.',
 
-  // Password rules. The server is the authority on these, not the client.
-  weak_password: 'That password is too weak. Use at least 8 characters.',
+  // Password rules. The server is the authority on these, not the client, and
+  // its exact threshold is a dashboard setting that can change without a
+  // release — so this message deliberately does not quote a number.
+  weak_password: 'That password is too weak. Try a longer one, or add more variety.',
   same_password: 'That is already your current password.',
 
   // Rate limits. The free plan sends 2 auth emails per hour, so this is a
