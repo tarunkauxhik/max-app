@@ -139,3 +139,30 @@ Skills may propose an update after the same failure pattern appears twice. The u
   produced exactly one profile row.
 - Should a rule or skill change be proposed? No. Re-verify after any Supabase platform upgrade; this
   is measured behaviour of a managed schema, not a contract.
+
+- Date: 2026-08-02
+- Area: checking an Expo bundle for leaked secrets
+- Symptom: `grep -c "sb_secret_"` against the exported Android Hermes bundle returned 1, and
+  `grep -cE "sb_secret_[A-Za-z0-9_-]{10,}"` also returned 1 — which reads as a secret key compiled
+  into the app.
+- Root cause: two independent false-positive sources. `@supabase/supabase-js` ships the literal
+  itself, in `isNewApiKey` at `dist/index.mjs:339`:
+  `key.startsWith("sb_publishable_") || key.startsWith("sb_secret_")`. And Hermes packs its string
+  table without separators, so a regex asking for "prefix followed by ten key characters" happily
+  matches the bytes of whatever string was pooled next.
+- Verified fix: none needed — there was no leak. Established by removing the guard literal from
+  `lib/supabase.ts`, rebuilding, and finding the count unchanged at 1, which located the occurrence
+  in library code rather than in project code or `.env`. Hermes also pools identical literals, which
+  is why the project's own guard string and the library's did not sum to 2.
+- Test/evidence: the decisive check is not a grep at all. `expo export` prints the variables it
+  exports — here exactly `EXPO_PUBLIC_SUPABASE_URL` and `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` — and
+  Metro inlines only `EXPO_PUBLIC_*`. Nothing else in `.env` can reach a bundle by any path. A
+  secret could therefore only leak by being stored *in* the publishable variable, which
+  `lib/supabase.ts` now throws on at module load.
+- Also verified: `.env` takes precedence over the shell environment in Expo CLI. An attempt to
+  override `EXPO_PUBLIC_SUPABASE_PUBLISHABLE_KEY` on the command line was ignored, so that is not a
+  usable way to build a bundle with substitute credentials.
+- Should a rule or skill change be proposed? Yes. "Grep the bundle for the secret" is a weak check
+  that produces false positives and, worse, would produce false *negatives* against a re-encoded or
+  minified value. Verify the inlining boundary — which variables are exported, and that the prefix
+  is enforced at load — rather than searching the artefact for a string.
