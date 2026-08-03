@@ -1,17 +1,19 @@
 import { useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Screen } from '@/components/ui/screen';
 import { SettingsRow } from '@/components/ui/settings-row';
+import { Skeleton } from '@/components/ui/skeleton';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Text } from '@/components/ui/text';
 import { SAMPLE_DATA_NOTE } from '@/constants/copy';
 import { Radii, Spacing } from '@/constants/tokens';
 import { useAuth } from '@/features/auth/state';
-import { useOnboarding } from '@/features/onboarding/state';
 import { commitmentLabel, interestLabel } from '@/features/onboarding/types';
 import { profileMock } from '@/features/profile/mock-data';
+import { useProfile } from '@/features/profile/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 
 type PlaceholderRow = {
@@ -26,6 +28,14 @@ const PREFERENCES: PlaceholderRow[] = [
   { id: 'appearance', label: 'Appearance', value: 'System' },
   { id: 'reminder', label: 'Daily reminder', value: '20:00' },
 ];
+
+/**
+ * `profiles.timezone` defaults to `'UTC'`, and `deviceTimeZone()` deliberately
+ * declines to overwrite it when Hermes cannot name the real zone. So a stored
+ * `'UTC'` is ambiguous — either the device really is on UTC, or the engine never
+ * told us. Saying so is more honest than presenting a default as a measurement.
+ */
+const UNKNOWN_TIMEZONE_NOTE = 'UTC — your device did not report a zone';
 
 const SUPPORT: PlaceholderRow[] = [
   { id: 'help', label: 'Help centre', status: 'Coming later' },
@@ -153,20 +163,52 @@ function RowGroup({ rows }: { rows: PlaceholderRow[] }) {
 }
 
 /**
- * What onboarding collected, read back.
+ * The `profiles` row, read back from the database.
  *
- * This is the only place the answers surface, so it is what stops onboarding
- * from being a form that goes nowhere. Rows are inert: nothing can be edited
- * until there is somewhere to save it.
+ * Deliberately reads the server rather than the device cache that
+ * `OnboardingProvider` keeps for the route guard. Two sources for the same
+ * three values is the defect ADR-009 exists to prevent, and the cache is a fast
+ * path for a routing decision, not a display copy. The visible cost is that this
+ * card needs loading and error states where it previously had none — which is
+ * the correct cost, because it is now telling the truth about stored data.
  */
-function OnboardingSummary() {
-  const { preferences } = useOnboarding();
+function ProfileDetails() {
+  const state = useProfile();
+
+  if (state.status === 'loading') {
+    return (
+      <View style={styles.section}>
+        <Text variant="heading">Your profile</Text>
+        <Card accessible accessibilityLabel="Loading your profile">
+          <Skeleton height={20} width="55%" />
+          <Skeleton height={20} width="40%" />
+          <Skeleton height={20} width="48%" />
+        </Card>
+      </View>
+    );
+  }
+
+  if (state.status === 'error') {
+    return (
+      <View style={styles.section}>
+        <Text variant="heading">Your profile</Text>
+        <Card>
+          <Text variant="body" tone="secondary">
+            {state.message}
+          </Text>
+          <Button label="Try again" variant="secondary" onPress={state.retry} />
+        </Card>
+      </View>
+    );
+  }
+
+  const { interests, commitment, timezone } = state.profile;
 
   return (
     <View style={styles.section}>
-      <Text variant="heading">From onboarding</Text>
+      <Text variant="heading">Your profile</Text>
       <Card style={styles.list}>
-        {preferences === null ? (
+        {commitment === null && interests.length === 0 ? (
           <SettingsRow
             label="Onboarding"
             status="Skipped"
@@ -174,16 +216,17 @@ function OnboardingSummary() {
           />
         ) : (
           <>
-            <SettingsRow
-              label="Interests"
-              value={preferences.interests.map(interestLabel).join(', ')}
-            />
-            <SettingsRow
-              label="Daily commitment"
-              value={commitmentLabel(preferences.commitment)}
-            />
+            <SettingsRow label="Interests" value={interests.map(interestLabel).join(', ')} />
+            {commitment ? (
+              <SettingsRow label="Daily commitment" value={commitmentLabel(commitment)} />
+            ) : null}
           </>
         )}
+        <SettingsRow
+          label="Time zone"
+          value={timezone === 'UTC' ? UNKNOWN_TIMEZONE_NOTE : timezone}
+          accessibilityHint="Read from your device. Used to decide which day a check-in belongs to."
+        />
       </Card>
     </View>
   );
@@ -204,7 +247,7 @@ export default function ProfileScreen() {
 
         <Identity />
 
-        <OnboardingSummary />
+        <ProfileDetails />
 
         <Card>
           <Text variant="heading">Achievements</Text>
