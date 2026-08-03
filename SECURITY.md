@@ -68,6 +68,24 @@ isolation file. See ADR-012.
   `goals (id, user_id)`, so re-parenting a row to another user's goal is rejected by the key itself
   rather than by a policy that has to remember to check.
 
+### Exercised from the app since M5a
+
+Until M5a this section described a database no client code touched. It now
+describes the enforcement behind every screen, verified from the app rather than
+only from pgTAP:
+
+- **Two accounts on one device, checked on hardware (2026-08-02).** Account B signed in and saw its
+  own empty Today, its own goal, its own actions and its own profile answers. Account A's goal,
+  progress and check-in were untouched afterwards. This is the app-level counterpart to pgTAP `004`,
+  and it closes the TEST_MATRIX "unauthorized row access" row that M4 could not.
+- **Measured server-side afterwards**, rather than inferred from the UI: zero `goal_actions` and zero
+  `check_ins` whose `user_id` differs from their parent goal's owner, and zero duplicates against
+  either uniqueness constraint. The composite foreign key makes drift structurally impossible; the
+  query confirms it rather than trusting that.
+- **Every write is scoped twice** — by an explicit `.eq('user_id', …)` in the query and by the policy
+  on the table. The filter is convenience; the policy is the control. A client that dropped the
+  filter would still reach only its own rows.
+
 **RLS answers "which rows". It never answers "which columns".** An UPDATE that satisfies
 `user_id = auth.uid()` is a legitimate row for that user, so without column grants it could rewrite
 server-owned columns on its own data. That is what the grants are for, and why a forgotten grant shows
@@ -159,9 +177,10 @@ Recorded rather than implied. Each names where it is addressed.
 |---|---|---|
 | Session token unencrypted at rest | Readable on a rooted or compromised device | Before M11 — needs a development build for `useSQLCipher`. ADR-013 |
 | Sign-up reveals whether an email is registered | Membership enumeration | Re-enable Confirm email before M11 |
-| Onboarding answers persist after sign-out | Data retained on a shared device | M5, when this moves to the `profiles` row and the device copy becomes a cache |
+| Onboarding answers persist after sign-out | Data retained on a shared device | **Partly addressed in M5a:** `profiles` is now the source of truth and the device copy is a cache for the route guard. It is still written per user id, still unencrypted, and still not cleared on sign-out — deliberately, so re-signing-in does not replay the flow |
 | Account deletion is not implemented | The Profile row is inert and says "Coming later" | Must cover: database rows (M3's `ON DELETE CASCADE` handles these), the auth user, active sessions, **and the local onboarding key**, which nothing currently deletes |
 | Expired-session behaviour untested | Unknown UX when a refresh token is finally rejected | M6, with the offline and refresh work |
+| A failed background write is not retried until the next launch | Onboarding answers can sit unsynced; the device cache keeps the app working meanwhile | M6, which adds real retry and offline queueing |
 | No password reset | A locked-out user has no route back | Not scheduled; needs email delivery, so it follows re-enabling Confirm email |
 
 ## Rules for future work

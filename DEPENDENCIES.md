@@ -29,6 +29,7 @@ Exact versions come from the generated Expo SDK project and its lockfile.
 | M1e integration and UX audit | none | none | Deletions only. See the orphan note below. |
 | M3 schema and RLS | `supabase@2.110.0` (dev) | none | CLI only. Never bundled. See below. |
 | M4 email authentication | `@supabase/supabase-js@^2.111.0`, `expo-sqlite@~16.0.10` | none | First runtime packages added since M0. Both ship in Expo Go. See below. |
+| M5a real goals and check-ins | **none** | none | Every read and write is built on the already-approved client. TanStack Query was deliberately **not** taken here — see ADR-015 — and remains pending M6. |
 
 M1a used only `react-native`, `react-native-safe-area-context` and `@expo/vector-icons`.
 `package.json`, `pnpm-lock.yaml` and `app.json` were unchanged, no `android/` or `ios/`

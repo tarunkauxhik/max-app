@@ -235,16 +235,56 @@ better than implying otherwise.
 Intentional limitation: the created goal is still session-only and vanishes on restart. That is
 ADR-005 behaving as designed, not a defect, and M5a is what replaces it.
 
-## M5: real goals, tasks and check-ins
+## M5a: real goals, actions and check-ins — complete (2026-08-02)
 
-Split in two, because the second half needs history that only the first half can produce.
+The milestone that made the app keep things. Nothing had ever survived a restart before this.
 
-**M5a — every write path.** Generated database types committed. Onboarding answers and timezone
-written to `profiles`. Goals created, read and archived from the database. Daily actions generated
-lazily per day. Real check-ins. Replaces the session-only state of ADR-005 and ADR-007.
+Delivered:
 
-**M5b — Insights on real data.** Streaks, weekly bars and achievements derived from the rows M5a
-produces, replacing the labelled sample data of ADR-009.
+- Database types generated from `max-dev` and committed, so a wrong column name is a compile
+  error rather than a 400 at runtime.
+- Onboarding answers and timezone written to `profiles`. The device record stays as the route
+  guard's fast path — synchronous, so a cold start picks a screen without a request, and correct
+  offline — while the row is the source of truth, reconciled in both directions after sign-in.
+- Goals created, read and archived. `SessionGoalProvider` retired: the isolation guarantee it
+  hand-rolled moved to `goals_select_own`, where the database enforces it.
+- Daily actions generated lazily per day, seeded once into `goal_actions` and read from the table
+  after that. Completion is `completed_at`, toggled optimistically with a rollback.
+- Real check-ins, one per goal per local day, with the uniqueness constraint doing the work
+  rather than a pre-flight check.
+- Three hooks on the `loading | ready | error` union ADR-009 fixed in M1e — the first time that
+  shape has produced a reachable error branch. See ADR-015 and ADR-016.
+
+Verified on a physical Android device in Expo Go, in three runs:
+
+- **Run 1, profile:** a fresh account's answers reached the server and read back after a
+  force-quit; an M4-era account's answers were pushed up by the reconcile on first launch;
+  offline produced a real error with a working retry.
+- **Run 2, goals:** a goal survived a force-quit — the step every previous milestone failed.
+  Double-tapping Confirm created one goal, not two. Archiving offline failed loudly and left the
+  goal intact, rather than the app believing a write that never happened.
+- **Run 3, actions, check-ins and two accounts:** ticks and the check-in both survived a
+  force-quit; an offline tick visibly rolled back; **a second account saw its own empty Today and
+  none of the first account's rows**, and the first account was untouched afterwards.
+
+Measured server-side after run 3, rather than inferred from the screen: 6 action rows across 2
+active goals with no duplicates against either uniqueness constraint, and zero `goal_actions` or
+`check_ins` whose `user_id` differs from their parent goal's owner.
+
+**Test coverage:** this closes the "unauthorized row access" row that M4 recorded as not yet
+applicable. **Expired-session behaviour remains uncovered** and still lands in M6.
+
+Constraints held: no dependencies added, no `android/` or `ios/` directory, no prebuild, Expo Go
+preserved. No schema change was needed — the M3 schema fit as designed.
+
+Known limitations, both deliberate: the local date is captured when a load runs, so an app left
+in the foreground across midnight keeps writing to the previous day; and a failed background
+write is not retried until the next launch. Both belong to M6.
+
+## M5b: Insights on real data
+
+Streaks, weekly bars and achievements derived from the rows M5a produces, replacing the labelled
+sample data of ADR-009. Profile achievements are the last fixture left in the app.
 
 ## M6: caching and offline handling
 
