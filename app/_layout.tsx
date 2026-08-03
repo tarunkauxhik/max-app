@@ -6,7 +6,6 @@ import { useEffect } from 'react';
 import 'react-native-reanimated';
 
 import { AuthProvider, useAuth } from '@/features/auth/state';
-import { SessionGoalProvider } from '@/features/goals/state';
 import { OnboardingProvider, useOnboarding } from '@/features/onboarding/state';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
@@ -72,12 +71,10 @@ export default function RootLayout() {
   return (
     <AuthProvider>
       <OnboardingProvider>
-        <SessionGoalProvider>
-          <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-            <RootStack />
-            <StatusBar style="auto" />
-          </ThemeProvider>
-        </SessionGoalProvider>
+        <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+          <RootStack />
+          <StatusBar style="auto" />
+        </ThemeProvider>
       </OnboardingProvider>
     </AuthProvider>
   );

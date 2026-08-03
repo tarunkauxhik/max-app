@@ -1,5 +1,8 @@
 export type Difficulty = 'gentle' | 'steady' | 'intense';
 
+/** Mirrors the `goals_status_allowed` constraint. */
+export type GoalStatus = 'active' | 'completed' | 'archived';
+
 /** In-progress goal being built by the creation flow. Nulls mean "not chosen yet". */
 export type GoalDraft = {
   title: string;
@@ -8,13 +11,21 @@ export type GoalDraft = {
   difficulty: Difficulty | null;
 };
 
-/** A confirmed goal. Session-only — see ADR-005. */
-export type LocalGoal = {
+/**
+ * A stored goal, as the app uses it.
+ *
+ * Named `Goal` since M5a, when it stopped being session-only. `startDate` is the
+ * local calendar date the goal began, which is what "week N of M" is measured
+ * from — see ADR-012 for why the server does not supply it.
+ */
+export type Goal = {
   id: string;
   title: string;
   minutesPerDay: number;
   durationWeeks: number;
   difficulty: Difficulty;
+  status: GoalStatus;
+  startDate: string;
   createdAt: string;
 };
 
@@ -71,4 +82,26 @@ export function validateTitle(title: string): string | null {
 export function difficultyLabel(value: Difficulty): string {
   const match = DIFFICULTY_OPTIONS.find((option) => option.value === value);
   return match ? match.label : value;
+}
+
+/**
+ * Narrow what the database returns.
+ *
+ * `difficulty` and `status` are CHECK-constrained columns, which the generated
+ * types describe only as `string`. The database does enforce both lists, but
+ * QUALITY_GATES requires backend output to be validated rather than asserted.
+ *
+ * Both fall back rather than returning null, because neither has a sensible
+ * "unknown" rendering: a goal with an unrecognised difficulty is still a goal
+ * the user needs to see. The fallbacks are the least surprising members of each
+ * set — the middle pace, and the status that keeps a goal visible.
+ */
+export function parseDifficulty(value: string): Difficulty {
+  return DIFFICULTY_OPTIONS.some((option) => option.value === value)
+    ? (value as Difficulty)
+    : 'steady';
+}
+
+export function parseGoalStatus(value: string): GoalStatus {
+  return value === 'completed' || value === 'archived' ? value : 'active';
 }

@@ -1,4 +1,4 @@
-import { difficultyLabel, type LocalGoal } from '@/features/goals/types';
+import { difficultyLabel, type Goal } from '@/features/goals/types';
 
 export type DailyAction = {
   id: string;
@@ -14,7 +14,7 @@ export type DailyAction = {
  * screen next to the one the user actually created. Three actions is the shape
  * the real plan will take — a main block of work, a review, and a log.
  */
-export function deriveActions(goal: LocalGoal): DailyAction[] {
+export function deriveActions(goal: Goal): DailyAction[] {
   const pace = difficultyLabel(goal.difficulty).toLowerCase();
 
   return [

@@ -1,4 +1,5 @@
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { Button } from '@/components/ui/button';
@@ -8,14 +9,19 @@ import { Screen } from '@/components/ui/screen';
 import { SummaryRow } from '@/components/ui/summary-row';
 import { Text } from '@/components/ui/text';
 import { Spacing } from '@/constants/tokens';
-import { useGoalDraft, useSessionGoal } from '@/features/goals/state';
+import { useAuth } from '@/features/auth/state';
+import { createGoal } from '@/features/goals/api';
+import { useGoalDraft } from '@/features/goals/state';
 import { difficultyLabel, validateTitle } from '@/features/goals/types';
 import { useTheme } from '@/hooks/use-theme';
 
 export default function GoalReviewScreen() {
   const colors = useTheme();
   const { draft } = useGoalDraft();
-  const { saveGoal } = useSessionGoal();
+  const { user } = useAuth();
+
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const missing: string[] = [];
   if (validateTitle(draft.title)) {
@@ -32,8 +38,36 @@ export default function GoalReviewScreen() {
   }
   const ready = missing.length === 0;
 
-  function handleConfirm() {
-    saveGoal(draft);
+  /**
+   * The first write the user waits on.
+   *
+   * Unlike onboarding, this one cannot be optimistic. Onboarding had a device
+   * record to fall back on and a reconcile to repair it later; a goal has
+   * neither, so navigating away before the insert lands would show Today with no
+   * goal and no explanation. The user stays here until the row exists.
+   *
+   * Guarded twice against a double tap, the same way `features/auth/auth-form.tsx`
+   * is: a synchronous check plus a disabled button. A duplicate here would create
+   * two goals, and there is no way in the UI to remove one.
+   */
+  async function handleConfirm() {
+    if (busy || !user) {
+      return;
+    }
+
+    setBusy(true);
+    setError(null);
+
+    const result = await createGoal(user.id, draft);
+
+    if (!result.ok) {
+      setBusy(false);
+      setError(result.message);
+      return;
+    }
+
+    // Not clearing `busy` on success: this screen is being dismissed, and
+    // re-enabling the button first gives a brief window to press it again.
     router.dismissTo('/');
   }
 
@@ -68,16 +102,21 @@ export default function GoalReviewScreen() {
         </Card>
 
         <Text variant="caption" tone="muted">
-          Confirming keeps this goal for the current session only. Nothing is saved to a device
-          or a server yet.
+          Confirming saves this goal to your account. You can archive it later, but it cannot be
+          deleted.
         </Text>
       </ScrollView>
 
       <View style={[styles.footer, { borderTopColor: colors.border }]}>
+        {error ? (
+          <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
+            {error}
+          </Text>
+        ) : null}
         <Button
-          label="Confirm goal"
-          onPress={handleConfirm}
-          disabled={!ready}
+          label={busy ? 'Saving…' : 'Confirm goal'}
+          onPress={() => void handleConfirm()}
+          disabled={!ready || busy}
           accessibilityHint={ready ? undefined : `Still needs ${missing.join(', ')}`}
         />
         {ready ? null : (

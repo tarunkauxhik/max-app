@@ -1,7 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from 'react';
 
-import { useAuth } from '@/features/auth/state';
-import { EMPTY_DRAFT, type GoalDraft, type LocalGoal } from '@/features/goals/types';
+import { EMPTY_DRAFT, type GoalDraft } from '@/features/goals/types';
 
 type GoalDraftValue = {
   draft: GoalDraft;
@@ -40,67 +39,20 @@ export function useGoalDraft(): GoalDraftValue {
   return value;
 }
 
-type SessionGoalValue = {
-  goal: LocalGoal | null;
-  saveGoal: (draft: GoalDraft) => void;
-  clearGoal: () => void;
-};
-
-const SessionGoalContext = createContext<SessionGoalValue | null>(null);
-
-/**
- * Holds the confirmed goal at the root so it outlives the creation flow.
- * Memory only: reloading the app clears it, per ADR-005.
+/*
+ * `SessionGoalProvider` lived here until M5a.3 and is deliberately gone.
  *
- * Mounted above the session gate, so unlike the tab tree it is *not* unmounted
- * when someone signs out. That makes clearing on account change this provider's
- * responsibility rather than the sign-out button's — the goal must not survive
- * into a different account on a shared device, and it must not survive a
- * session that ended without anyone pressing anything, such as an expired
- * refresh token.
+ * It held the confirmed goal in memory at the root, which meant it had to clear
+ * itself on account change — it sat above the session gate, so signing out did
+ * not unmount it, and one account's goal would otherwise have carried into the
+ * next on a shared device. ADR-014 records that.
+ *
+ * The goal is now a row, and the guarantee moved with it: `goals_select_own`
+ * restricts every read to `(select auth.uid()) = user_id`, so isolation is
+ * enforced by the database rather than by remembering to reset a provider. That
+ * is a strictly better place for it, and it is why this provider was removed
+ * rather than kept alongside the query.
+ *
+ * `GoalDraftProvider` above stays. A half-finished form has no business being a
+ * row, and it is mounted inside the flow, so it is discarded on exit anyway.
  */
-export function SessionGoalProvider({ children }: { children: ReactNode }) {
-  const { user } = useAuth();
-  const userId = user?.id ?? null;
-
-  const [goal, setGoal] = useState<LocalGoal | null>(null);
-  const [ownedBy, setOwnedBy] = useState<string | null>(null);
-
-  // Adjusted during render, so no frame exists in which the previous account's
-  // goal is visible to the next one. An effect would render that frame first.
-  if (ownedBy !== userId) {
-    setOwnedBy(userId);
-    setGoal(null);
-  }
-
-  const saveGoal = useCallback((draft: GoalDraft) => {
-    // Narrowing guard: the review step blocks confirmation until these are set.
-    if (draft.minutesPerDay === null || draft.durationWeeks === null || draft.difficulty === null) {
-      return;
-    }
-
-    setGoal({
-      id: Date.now().toString(36),
-      title: draft.title.trim(),
-      minutesPerDay: draft.minutesPerDay,
-      durationWeeks: draft.durationWeeks,
-      difficulty: draft.difficulty,
-      createdAt: new Date().toISOString(),
-    });
-  }, []);
-
-  const clearGoal = useCallback(() => setGoal(null), []);
-
-  const value = useMemo(() => ({ goal, saveGoal, clearGoal }), [goal, saveGoal, clearGoal]);
-
-  return <SessionGoalContext.Provider value={value}>{children}</SessionGoalContext.Provider>;
-}
-
-export function useSessionGoal(): SessionGoalValue {
-  const value = useContext(SessionGoalContext);
-
-  if (!value) {
-    throw new Error('useSessionGoal must be used inside SessionGoalProvider');
-  }
-  return value;
-}
