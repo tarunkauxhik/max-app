@@ -49,7 +49,7 @@ requires a prebuild.
 | `StatTile` | A number over a caption |
 | `OptionGroup` | Single select, `wrap` chips or `stack` with notes |
 | `MultiOptionGroup` | Multi select with a cap |
-| `TextField` | Labelled input with hint and inline error |
+| `TextField` | Labelled input with hint and inline error; `multiline` gives a taller, top-aligned box |
 | `EmptyState` | Neutral tray icon, title, body |
 | `Skeleton` | Static loading block — deliberately no shimmer |
 
@@ -66,8 +66,8 @@ Use these exactly; do not invent a fourth way to say "nothing here".
 | Loading | `Skeleton` blocks inside a container marked `accessible` with one label |
 | Empty | `EmptyState` plus exactly one primary action |
 | Disabled | `Button disabled` plus an `accessibilityHint` naming what is missing |
-| Error | `{ status: 'error'; message; retry }` — shape agreed, not yet rendered (ADR-009) |
-| Success | `Text tone="success"` caption stating what happened and what was *not* saved |
+| Error | `{ status: 'error'; message; retry }` — rendered on every server-backed screen since M5 |
+| Success | `Text tone="success"` caption stating what happened |
 | Destructive | Own section, own heading, a warning line, and a hint stating the consequence |
 | Non-functional | No `onPress`; `View` with `text` role, no chevron, visible "Coming later" |
 

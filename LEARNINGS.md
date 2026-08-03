@@ -140,6 +140,33 @@ Skills may propose an update after the same failure pattern appears twice. The u
 - Should a rule or skill change be proposed? No. Re-verify after any Supabase platform upgrade; this
   is measured behaviour of a managed schema, not a contract.
 
+- Date: 2026-08-04
+- Area: verifying derived numbers before a device run
+- Symptom: none on screen. The Insights "recent check-ins" list reported a plausible actions ratio
+  that was silently wrong — a check-in against a three-action goal read `9/9` on a day three goals
+  were active.
+- Root cause: `buildRecentCheckIns` matched `goal_actions` on `scheduled_date` alone. A check-in
+  belongs to one goal, so the filter pooled every goal's actions for that day. Both numbers were real
+  and their ratio was even correct-looking, which is why nothing about the screen would have flagged
+  it.
+- Verified fix: match on `goal_id` **and** date, and show the goal title on each row so two check-ins
+  made on the same day are distinguishable at all.
+- Test/evidence: found by computing the expected figures with `supabase db query` **before** writing
+  the device-test guide, in order to state exact numbers the tester could compare against. Writing
+  "this must read 3/3" required knowing what the code would produce, and that is what exposed the
+  mismatch. The device run then confirmed every figure — streaks, the week denominator, per-goal
+  ratios and cross-account isolation — against the query.
+- Also verified the same way: `computeStreaks` and `currentWeekOf` were executed against the real
+  source files, with only the import path rewritten, over 27 cases including month ends, year ends,
+  leap days, duplicate dates from two goals on one day, unsorted input and goals run past their
+  duration. Node 24 runs TypeScript directly with `--experimental-strip-types`, so this needs no test
+  runner and no dependency.
+- Should a rule or skill change be proposed? Yes. **Derive the expected values from the database
+  before asking for a device test, not after.** A screen full of plausible numbers is unfalsifiable by
+  looking at it; a tester can only confirm a number they were given in advance. This is the same
+  lesson as the pgTAP `throws_ok` entry — an assertion nobody executed proves nothing — applied to
+  derived UI figures, where the failure mode is quieter because nothing errors.
+
 - Date: 2026-08-02
 - Area: checking an Expo bundle for leaked secrets
 - Symptom: `grep -c "sb_secret_"` against the exported Android Hermes bundle returned 1, and

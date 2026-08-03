@@ -281,12 +281,54 @@ Known limitations, both deliberate: the local date is captured when a load runs,
 in the foreground across midnight keeps writing to the previous day; and a failed background
 write is not retried until the next launch. Both belong to M6.
 
-## M5b: Insights on real data
+## M5b: Insights on real data — complete (2026-08-04)
 
-Streaks, weekly bars and achievements derived from the rows M5a produces, replacing the labelled
-sample data of ADR-009. Profile achievements are the last fixture left in the app.
+**No screen in MAX renders invented data any more.** M5 is closed.
+
+Two gaps had to be filled before Insights could render anything real, both of them UI rather than
+schema — the columns and grants had existed since M3:
+
+- **Check-in notes.** `check_ins.note` was never written, so "Recent check-ins" would have been a
+  list of bare dates. Tapping *Check in* now reveals an optional note first. PRODUCT.md lists
+  text-first check-ins in the first release boundary.
+- **Goal completion.** `status = 'completed'` was unreachable, so a "Goals finished" tile could
+  only ever read 0. *Mark goal complete* joins *Archive* as the two ways a goal ends.
+
+Delivered:
+
+- Streaks, weekly bars, goal progress and recent check-ins derived from four bounded queries.
+- Profile achievements computed by the same functions Insights uses, so one statistic has one
+  implementation.
+- `SAMPLE_DATA_NOTE`, `constants/copy.ts` and both `mock-data.ts` files deleted.
+- `TextField` handles `multiline` itself rather than leaving each caller to work around it.
+
+Verified on a physical Android device in Expo Go, twice:
+
+- **Run 1:** notes saved and survived a restart, an empty note was accepted, the multiline field
+  was top-aligned and four lines tall, Save worked on the first tap with the keyboard open, and a
+  completion attempted offline failed loudly instead of being believed.
+- **Run 2, against numbers computed from the database beforehand:** every figure matched — longest
+  streak 2, check-ins 2 (distinct days, from three rows), goals finished 1, "2 of 2 planned days
+  complete", per-goal ratios of 3/3, and a second account seeing none of the first's history on a
+  screen that aggregates.
+
+**A defect was found before that run rather than by it:** computing the expected figures in order
+to write the guide exposed that a check-in's action ratio was matched on date alone, pooling every
+goal's actions for that day. LEARNINGS records the practice that caught it.
+
+Constraints held: no migration, no dependencies, no prebuild, Expo Go preserved.
 
 ## M6: caching and offline handling
+
+Now scoped, since M5 named what it owes:
+
+- **TanStack Query**, deliberately deferred from M5a (ADR-015) so a stale row had one suspect
+  rather than three. It replaces the hand-written focus refetching in four hooks and deduplicates
+  the two reads of `profiles`.
+- **Midnight rollover.** The local date is captured when a load runs, so an app left in the
+  foreground across midnight keeps writing to the previous day. Needs `AppState` and a clock tick.
+- **Failed writes are not retried** until the next launch — currently true of the onboarding sync.
+- **Expired-session behaviour**, the one TEST_MATRIX row still uncovered since M4.
 
 ## M7: optional images
 

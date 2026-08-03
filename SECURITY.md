@@ -85,6 +85,11 @@ only from pgTAP:
 - **Every write is scoped twice** — by an explicit `.eq('user_id', …)` in the query and by the policy
   on the table. The filter is convenience; the policy is the control. A client that dropped the
   filter would still reach only its own rows.
+- **Aggregating screens were checked separately (2026-08-04).** Insights and the Profile achievement
+  tiles read across every goal and every check-in an account has, which is a wider read than any
+  other screen makes. A second account on the same device saw zero rows from the first — no streak,
+  no weekly bars, no check-in notes. Notes are the most sensitive text MAX stores, so this was
+  verified rather than assumed to follow from the per-row checks.
 
 **RLS answers "which rows". It never answers "which columns".** An UPDATE that satisfies
 `user_id = auth.uid()` is a legitimate row for that user, so without column grants it could rewrite
@@ -163,7 +168,10 @@ would reach it.
   `@supabase/auth-js@2.111.0`, to fixed strings. It never falls back to `error.message`, because raw
   strings can name internal components and change between releases.
 - **The app contains no `console.*` calls at all.** No token, password, email or session object is
-  written to any log, and there is no analytics SDK installed to receive one.
+  written to any log, and there is no analytics SDK installed to receive one. This matters more since
+  M5b: check-in notes are free text a user writes about their own life, and they must never reach a
+  log line. When their contents needed checking during development, only `note IS NOT NULL` and
+  `length(note)` were queried — never the text.
 - Rate limiting is server-side. The client has no retry loop; `over_request_rate_limit` and
   `over_email_send_rate_limit` are surfaced to the user and the attempt stops there.
 - Duplicate submission is blocked twice in `features/auth/auth-form.tsx` — a synchronous `if (busy)
