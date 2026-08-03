@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useMemo, useState } from 'react';
 import {
@@ -30,6 +31,7 @@ import {
 } from '@/features/today/actions';
 import { useToday } from '@/features/today/use-today';
 import { useTheme } from '@/hooks/use-theme';
+import { invalidateDerived, queryKeys } from '@/lib/query';
 
 function TodayLoading() {
   return (
@@ -55,17 +57,48 @@ function TodayLoading() {
  * state — M5a.4 and M5a.5 move them into `goal_actions` and `check_ins`, and
  * until then the caption below says so rather than implying they are stored.
  */
-function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void }) {
+function GoalContent({ goal }: { goal: Goal }) {
   const colors = useTheme();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [lifecycleBusy, setLifecycleBusy] = useState(false);
   const [composing, setComposing] = useState(false);
   const [note, setNote] = useState('');
   const { state, writeError, dismissWriteError, toggleAction, checkIn, checkingIn } =
     useToday(goal);
 
   const noteError = validateNote(note);
+
+  /**
+   * Completing and archiving are one mutation with two endings.
+   *
+   * Invalidating the active-goal query is what removes the goal from this
+   * screen — there is no longer an `onArchived` callback threaded down from the
+   * parent, because the cache is what both of them were really talking about.
+   */
+  const endGoal = useMutation({
+    mutationFn: async (kind: 'complete' | 'archive') => {
+      if (!user) {
+        throw new Error('No account is signed in.');
+      }
+
+      const run = kind === 'complete' ? completeGoal : archiveGoal;
+      const result = await run(goal.id, user.id);
+
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
+      return user.id;
+    },
+    onSuccess: (userId) => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.activeGoal(userId) });
+      // Completing a goal moves the "goals finished" tile, so the derived
+      // figures are stale from here too.
+      void invalidateDerived(userId);
+    },
+    onError: (error, kind) =>
+      Alert.alert(kind === 'complete' ? 'Complete goal' : 'Archive goal', error.message),
+  });
 
   const actions = state.status === 'ready' ? state.actions : [];
   const checkedIn = state.status === 'ready' && state.checkedIn;
@@ -86,7 +119,7 @@ function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void 
    * second is styled destructive.
    */
   function confirmEnding(kind: 'complete' | 'archive') {
-    if (lifecycleBusy || !user) {
+    if (endGoal.isPending) {
       return;
     }
 
@@ -102,19 +135,7 @@ function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void 
         {
           text: completing ? 'Mark complete' : 'Archive',
           style: completing ? 'default' : 'destructive',
-          onPress: () => {
-            setLifecycleBusy(true);
-            const run = completing ? completeGoal : archiveGoal;
-
-            void run(goal.id, user.id).then((result) => {
-              setLifecycleBusy(false);
-              if (result.ok) {
-                onArchived();
-              } else {
-                Alert.alert(completing ? 'Complete goal' : 'Archive goal', result.message);
-              }
-            });
-          },
+          onPress: () => endGoal.mutate(kind),
         },
       ]
     );
@@ -256,17 +277,17 @@ function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void 
 
       <View style={styles.section}>
         <Button
-          label={lifecycleBusy ? 'Saving…' : 'Mark goal complete'}
+          label={endGoal.isPending ? 'Saving…' : 'Mark goal complete'}
           variant="secondary"
           onPress={() => confirmEnding('complete')}
-          disabled={lifecycleBusy}
+          disabled={endGoal.isPending}
           accessibilityHint="Finishes this goal and counts it towards your achievements."
         />
         <Button
           label="Archive goal"
           variant="ghost"
           onPress={() => confirmEnding('archive')}
-          disabled={lifecycleBusy}
+          disabled={endGoal.isPending}
           accessibilityHint="Removes this goal from Today without counting it as finished."
         />
       </View>
@@ -275,7 +296,7 @@ function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void 
 }
 
 export default function TodayScreen() {
-  const { state, reload } = useActiveGoal();
+  const { state } = useActiveGoal();
 
   const today = useMemo(
     () =>
@@ -331,8 +352,8 @@ export default function TodayScreen() {
 
           {state.status === 'ready' && state.goal !== null ? (
             // Keyed by goal id so ending one and creating another starts with
-            // fresh completion state rather than inheriting the previous goal's.
-            <GoalContent key={state.goal.id} goal={state.goal} onArchived={reload} />
+            // fresh local state rather than inheriting the previous goal's.
+            <GoalContent key={state.goal.id} goal={state.goal} />
           ) : null}
         </ScrollView>
       </KeyboardAvoidingView>

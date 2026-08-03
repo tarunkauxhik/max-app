@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useState } from 'react';
 
 import { useAuth } from '@/features/auth/state';
 import type { Goal } from '@/features/goals/types';
@@ -10,18 +11,19 @@ import {
   type DailyAction,
 } from '@/features/today/api';
 import { localDateString } from '@/lib/dates';
+import { invalidateDerived, queryKeys } from '@/lib/query';
 
 /**
  * Today's actions and check-in for one goal.
  *
- * Loads both together because the check-in button's enabled state depends on
- * every action being complete — showing one without the other would render a
- * button whose reason for being disabled had not arrived yet.
+ * Both are loaded under one key because the check-in button's enabled state
+ * depends on every action being complete — showing one without the other would
+ * render a button whose reason for being disabled had not arrived yet.
  *
- * **Known limitation:** the date is captured when the load runs. An app left
- * open in the foreground across midnight keeps writing to the previous day until
- * something triggers a reload. Fixing it properly means reacting to `AppState`
- * and to a clock tick, which belongs with the refresh work in M6.
+ * **Known limitation:** the date is captured when the query key is built, so an
+ * app left in the foreground across midnight keeps writing to the previous day.
+ * M6b fixes this by recomputing the date on `AppState` and letting the changed
+ * key pull a new day's data.
  */
 export type TodayState =
   | { status: 'loading' }
@@ -30,7 +32,7 @@ export type TodayState =
 
 type TodayValue = {
   state: TodayState;
-  /** Null while nothing is in flight; otherwise the message to surface. */
+  /** Null while nothing has failed; otherwise the message to surface. */
   writeError: string | null;
   dismissWriteError: () => void;
   toggleAction: (actionId: string) => void;
@@ -38,148 +40,170 @@ type TodayValue = {
   checkingIn: boolean;
 };
 
+type TodayData = { actions: DailyAction[]; checkedIn: boolean };
+
 export function useToday(goal: Goal): TodayValue {
   const { user } = useAuth();
   const userId = user?.id ?? null;
+  const queryClient = useQueryClient();
 
-  const [state, setState] = useState<TodayState>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
+  const date = localDateString();
+  const key = queryKeys.today(userId ?? '', goal.id, date);
+
   const [writeError, setWriteError] = useState<string | null>(null);
-  const [checkingIn, setCheckingIn] = useState(false);
-
-  const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
   const dismissWriteError = useCallback(() => setWriteError(null), []);
 
-  useEffect(() => {
-    if (!userId) {
-      return;
-    }
+  const query = useQuery({
+    queryKey: key,
+    queryFn: async (): Promise<TodayData> => {
+      if (userId === null) {
+        throw new Error('No account is signed in.');
+      }
 
-    let cancelled = false;
-    setState({ status: 'loading' });
-
-    const date = localDateString();
-
-    void (async () => {
       // Sequential, not parallel: seeding runs inside `loadActionsForDate`, and
       // there is no reason to ask about a check-in for a day whose actions could
       // not be loaded.
       const actions = await loadActionsForDate(userId, goal, date);
 
-      if (cancelled) {
-        return;
-      }
       if (!actions.ok) {
-        setState({ status: 'error', message: actions.message, retry });
-        return;
+        throw new Error(actions.message);
       }
 
       const checkIn = await fetchCheckIn(userId, goal.id, date);
 
-      if (cancelled) {
-        return;
+      if (!checkIn.ok) {
+        throw new Error(checkIn.message);
       }
-      setState(
-        checkIn.ok
-          ? { status: 'ready', actions: actions.actions, checkedIn: checkIn.checkedIn }
-          : { status: 'error', message: checkIn.message, retry }
-      );
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [userId, goal, attempt, retry]);
+      return { actions: actions.actions, checkedIn: checkIn.checkedIn };
+    },
+    enabled: userId !== null,
+  });
 
   /**
-   * Optimistic, with a rollback.
-   *
-   * A checkbox that waits for a round trip before moving reads as broken, and
-   * one that moves and then silently lies is worse. This moves immediately, and
-   * puts the row back exactly as it was if the write fails — including
-   * `completedAt`, so a rolled-back tick does not lose its original timestamp.
+   * Optimistic, with a rollback — now React Query's canonical version of the
+   * hand-rolled one from M5a. The behaviour verified on device is unchanged: the
+   * tick moves immediately and snaps back on failure with its original
+   * timestamp intact, because `onMutate` returns the whole previous cache entry
+   * rather than trying to reconstruct one field.
    */
-  const toggleAction = useCallback(
-    (actionId: string) => {
-      if (!userId || state.status !== 'ready') {
-        return;
+  const toggle = useMutation({
+    mutationFn: async (variables: { actionId: string; completed: boolean }) => {
+      if (userId === null) {
+        throw new Error('No account is signed in.');
       }
 
-      const target = state.actions.find((action) => action.id === actionId);
-      if (!target) {
-        return;
+      const result = await setActionCompleted(variables.actionId, userId, variables.completed);
+
+      if (!result.ok) {
+        throw new Error(result.message);
       }
+    },
+    onMutate: async (variables) => {
+      // Stops an in-flight refetch from landing after the optimistic write and
+      // reverting it on screen.
+      await queryClient.cancelQueries({ queryKey: key });
+      const previous = queryClient.getQueryData<TodayData>(key);
 
-      const nextCompleted = target.completedAt === null;
-      const previousCompletedAt = target.completedAt;
-
-      // `checkedIn` is deliberately untouched. Before M5a.5 this screen cleared
-      // it whenever an action was unticked, because it was a local flag with no
-      // meaning beyond the session. It is now a row: the check-in genuinely
-      // happened, and unticking an action afterwards does not un-happen it.
-      // Undoing one would mean deleting that row, which no screen offers.
-      setState((current) =>
-        current.status === 'ready'
+      queryClient.setQueryData<TodayData>(key, (current) =>
+        current
           ? {
               ...current,
               actions: current.actions.map((action) =>
-                action.id === actionId
-                  ? { ...action, completedAt: nextCompleted ? new Date().toISOString() : null }
+                action.id === variables.actionId
+                  ? {
+                      ...action,
+                      completedAt: variables.completed ? new Date().toISOString() : null,
+                    }
                   : action
               ),
             }
           : current
       );
 
-      void setActionCompleted(actionId, userId, nextCompleted).then((result) => {
-        if (result.ok) {
-          return;
-        }
-        setWriteError(result.message);
-        setState((current) =>
-          current.status === 'ready'
-            ? {
-                ...current,
-                actions: current.actions.map((action) =>
-                  action.id === actionId ? { ...action, completedAt: previousCompletedAt } : action
-                ),
-              }
-            : current
-        );
-      });
+      return { previous };
     },
-    [userId, state]
-  );
+    onError: (error, _variables, context) => {
+      if (context?.previous) {
+        queryClient.setQueryData(key, context.previous);
+      }
+      setWriteError(error.message);
+    },
+    onSuccess: () => {
+      if (userId) {
+        // Completing an action changes the weekly bars, so Insights and the
+        // achievement tiles are stale from this moment.
+        void invalidateDerived(userId);
+      }
+    },
+  });
 
   /**
-   * Not optimistic, unlike the toggle.
-   *
-   * A check-in is the thing the user came to do, so claiming it landed and
-   * quietly reverting would be the wrong way round. It is also cheap to wait
-   * for: one insert, once a day.
+   * Not optimistic, unlike the toggle. A check-in is the thing the user came to
+   * do, so claiming it landed and quietly reverting would be the wrong way
+   * round — and it is cheap to wait for: one insert, once a day.
    */
-  const checkIn = useCallback(
-    (note: string) => {
-      if (!userId || checkingIn || state.status !== 'ready' || state.checkedIn) {
-        return;
+  const check = useMutation({
+    mutationFn: async (note: string) => {
+      if (userId === null) {
+        throw new Error('No account is signed in.');
       }
 
-      setCheckingIn(true);
+      const result = await createCheckIn(userId, goal.id, date, note);
 
-      void createCheckIn(userId, goal.id, localDateString(), note).then((result) => {
-        setCheckingIn(false);
-
-        if (!result.ok) {
-          setWriteError(result.message);
-          return;
-        }
-        setState((current) =>
-          current.status === 'ready' ? { ...current, checkedIn: true } : current
-        );
-      });
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
     },
-    [userId, goal.id, checkingIn, state]
+    onSuccess: () => {
+      queryClient.setQueryData<TodayData>(key, (current) =>
+        current ? { ...current, checkedIn: true } : current
+      );
+      if (userId) {
+        void invalidateDerived(userId);
+      }
+    },
+    onError: (error) => setWriteError(error.message),
+  });
+
+  const toggleAction = useCallback(
+    (actionId: string) => {
+      const target = query.data?.actions.find((action) => action.id === actionId);
+
+      if (!target) {
+        return;
+      }
+      toggle.mutate({ actionId, completed: target.completedAt === null });
+    },
+    [query.data, toggle]
   );
 
-  return { state, writeError, dismissWriteError, toggleAction, checkIn, checkingIn };
+  const checkIn = useCallback(
+    (note: string) => {
+      if (check.isPending || query.data?.checkedIn) {
+        return;
+      }
+      check.mutate(note);
+    },
+    [check, query.data]
+  );
+
+  const state: TodayState =
+    query.isPending || userId === null
+      ? { status: 'loading' }
+      : query.isError
+        ? {
+            status: 'error',
+            message: query.error.message,
+            retry: () => void query.refetch(),
+          }
+        : { status: 'ready', actions: query.data.actions, checkedIn: query.data.checkedIn };
+
+  return {
+    state,
+    writeError,
+    dismissWriteError,
+    toggleAction,
+    checkIn,
+    checkingIn: check.isPending,
+  };
 }

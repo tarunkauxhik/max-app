@@ -1,18 +1,18 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback } from 'react';
 
 import { useAuth } from '@/features/auth/state';
 import { fetchActiveGoal } from '@/features/goals/api';
 import type { Goal } from '@/features/goals/types';
+import { queryKeys } from '@/lib/query';
 
 /**
  * The signed-in account's active goal.
  *
- * Same union as `useProfile`, for the reason ADR-009 gave: one agreed shape for
- * every server-backed screen. It differs in returning `reload` alongside the
- * state, because this screen also *writes* — archiving happens on Today itself
- * and has to refresh what it just changed. `retry` in the error branch is the
- * same function; both are exposed so neither caller has to know that.
+ * Keeps returning `reload` alongside the state. Ending a goal happens on Today
+ * itself, so the screen has to refresh what it just changed — `retry` in the
+ * error branch is the same function, and neither caller should have to know
+ * that.
  */
 export type ActiveGoalState =
   | { status: 'loading' }
@@ -23,50 +23,37 @@ export function useActiveGoal(): { state: ActiveGoalState; reload: () => void } 
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const [state, setState] = useState<ActiveGoalState>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
-
-  const reload = useCallback(() => setAttempt((previous) => previous + 1), []);
-
-  // Refetch on focus, so returning from the creation flow shows the goal that
-  // was just created without the flow having to signal anything back. The first
-  // focus is skipped because it coincides with mount, where the effect below
-  // already fetches.
-  const mounted = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!mounted.current) {
-        mounted.current = true;
-        return;
+  const query = useQuery({
+    queryKey: queryKeys.activeGoal(userId ?? ''),
+    queryFn: async () => {
+      if (userId === null) {
+        throw new Error('No account is signed in.');
       }
-      setAttempt((previous) => previous + 1);
-    }, [])
-  );
 
-  useEffect(() => {
-    if (!userId) {
-      return;
-    }
+      const result = await fetchActiveGoal(userId);
 
-    let cancelled = false;
-    setState({ status: 'loading' });
-
-    void fetchActiveGoal(userId).then((result) => {
-      if (cancelled) {
-        return;
+      if (!result.ok) {
+        throw new Error(result.message);
       }
-      setState(
-        result.ok
-          ? { status: 'ready', goal: result.goal }
-          : { status: 'error', message: result.message, retry: reload }
-      );
-    });
+      // Null is a legitimate answer — no active goal is the empty state, not a
+      // failure — so it has to be wrapped. React Query treats a bare
+      // `undefined` as "no data", and an unwrapped null would be indistinguishable
+      // from a query that has not run.
+      return { goal: result.goal };
+    },
+    enabled: userId !== null,
+  });
 
-    return () => {
-      cancelled = true;
+  const reload = useCallback(() => void query.refetch(), [query]);
+
+  if (query.isPending || userId === null) {
+    return { state: { status: 'loading' }, reload };
+  }
+  if (query.isError) {
+    return {
+      state: { status: 'error', message: query.error.message, retry: reload },
+      reload,
     };
-  }, [userId, attempt, reload]);
-
-  return { state, reload };
+  }
+  return { state: { status: 'ready', goal: query.data.goal }, reload };
 }

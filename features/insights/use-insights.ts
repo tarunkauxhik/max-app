@@ -1,16 +1,17 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/features/auth/state';
 import { fetchInsights } from '@/features/insights/api';
 import type { InsightsSnapshot } from '@/features/insights/types';
+import { queryKeys } from '@/lib/query';
 
 /**
- * Insights, derived from real rows since M5b.
+ * Insights, derived from real rows since M5b and cached since M6a.
  *
  * This union was written in M1e against a fixture, with a comment saying the
- * error branch could not occur yet and the backend milestone would implement it.
- * That is what happened here — the shape did not change, only what fills it.
+ * error branch could not occur yet. It has now survived two milestones that
+ * changed everything behind it and nothing about it, which is the argument for
+ * having agreed the shape early.
  */
 export type InsightsState =
   | { status: 'loading' }
@@ -21,49 +22,32 @@ export function useInsights(): InsightsState {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const [state, setState] = useState<InsightsState>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
-
-  const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
-
-  // Refetch on focus: checking in on Today should be visible the moment the user
-  // switches tabs, and this screen is almost always reached that way. The first
-  // focus is skipped because it coincides with mount.
-  const mounted = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!mounted.current) {
-        mounted.current = true;
-        return;
+  const query = useQuery({
+    queryKey: queryKeys.insights(userId ?? ''),
+    queryFn: async () => {
+      if (userId === null) {
+        throw new Error('No account is signed in.');
       }
-      setAttempt((previous) => previous + 1);
-    }, [])
-  );
 
-  useEffect(() => {
-    if (!userId) {
-      return;
-    }
+      const result = await fetchInsights(userId);
 
-    let cancelled = false;
-    setState({ status: 'loading' });
-
-    void fetchInsights(userId).then((result) => {
-      if (cancelled) {
-        return;
+      if (!result.ok) {
+        throw new Error(result.message);
       }
-      setState(
-        result.ok
-          ? { status: 'ready', data: result.snapshot }
-          : { status: 'error', message: result.message, retry }
-      );
-    });
+      return result.snapshot;
+    },
+    enabled: userId !== null,
+  });
 
-    return () => {
-      cancelled = true;
+  if (query.isPending || userId === null) {
+    return { status: 'loading' };
+  }
+  if (query.isError) {
+    return {
+      status: 'error',
+      message: query.error.message,
+      retry: () => void query.refetch(),
     };
-  }, [userId, attempt, retry]);
-
-  return state;
+  }
+  return { status: 'ready', data: query.data };
 }

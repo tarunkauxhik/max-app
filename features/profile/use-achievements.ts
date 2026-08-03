@@ -1,16 +1,16 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/features/auth/state';
 import { fetchAchievements, type Achievements } from '@/features/insights/api';
+import { queryKeys } from '@/lib/query';
 
 /**
  * The three Profile achievement figures.
  *
- * Reads from `features/insights/api.ts` rather than defining its own counting,
- * so "longest streak" on Profile and "longest streak" on Insights are the same
- * number produced by the same function. Two implementations of one statistic is
- * how they drift.
+ * Still reads `features/insights/api.ts` rather than defining its own counting,
+ * so "longest streak" on Profile and on Insights stay one function. M6a adds a
+ * second reason they cannot drift: both are invalidated together by
+ * `invalidateDerived`, so a check-in moves them in the same tick.
  */
 export type AchievementsState =
   | { status: 'loading' }
@@ -21,46 +21,32 @@ export function useAchievements(): AchievementsState {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const [state, setState] = useState<AchievementsState>({ status: 'loading' });
-  const [attempt, setAttempt] = useState(0);
-
-  const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
-
-  const mounted = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!mounted.current) {
-        mounted.current = true;
-        return;
+  const query = useQuery({
+    queryKey: queryKeys.achievements(userId ?? ''),
+    queryFn: async () => {
+      if (userId === null) {
+        throw new Error('No account is signed in.');
       }
-      setAttempt((previous) => previous + 1);
-    }, [])
-  );
 
-  useEffect(() => {
-    if (!userId) {
-      return;
-    }
+      const result = await fetchAchievements(userId);
 
-    let cancelled = false;
-    setState({ status: 'loading' });
-
-    void fetchAchievements(userId).then((result) => {
-      if (cancelled) {
-        return;
+      if (!result.ok) {
+        throw new Error(result.message);
       }
-      setState(
-        result.ok
-          ? { status: 'ready', achievements: result.achievements }
-          : { status: 'error', message: result.message, retry }
-      );
-    });
+      return result.achievements;
+    },
+    enabled: userId !== null,
+  });
 
-    return () => {
-      cancelled = true;
+  if (query.isPending || userId === null) {
+    return { status: 'loading' };
+  }
+  if (query.isError) {
+    return {
+      status: 'error',
+      message: query.error.message,
+      retry: () => void query.refetch(),
     };
-  }, [userId, attempt, retry]);
-
-  return state;
+  }
+  return { status: 'ready', achievements: query.data };
 }

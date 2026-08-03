@@ -1,17 +1,19 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 
 import { useAuth } from '@/features/auth/state';
 import { fetchProfile, type Profile } from '@/features/profile/api';
+import { queryKeys } from '@/lib/query';
 
 /**
  * The `profiles` row for the signed-in account.
  *
- * The first hook in MAX to actually reach the network, so it is the one that
- * establishes the shape. `useInsights` declared this union in M1e and never
- * produced the error branch, because nothing could fail yet. ADR-009 fixed the
- * shape then precisely so this milestone would implement it rather than invent a
- * second one — a message plus a `retry` the user can press.
+ * The union is unchanged from M5a — ADR-009 fixed that shape, and screens should
+ * not have to care that the machinery behind it moved. What went away in M6a is
+ * the machinery: an `attempt` counter, a `useFocusEffect` with a `mounted` ref
+ * to skip the first focus, and a `cancelled` flag guarding against a resolved
+ * request writing state for an account that has since signed out. React Query
+ * owns all three, and it also deduplicates this with the read
+ * `OnboardingProvider` makes of the same row on sign-in.
  */
 export type ProfileState =
   | { status: 'loading' }
@@ -22,69 +24,41 @@ export function useProfile(): ProfileState {
   const { user } = useAuth();
   const userId = user?.id ?? null;
 
-  const [state, setState] = useState<ProfileState>({ status: 'loading' });
-  // Bumped by `retry`. Keeping the trigger in state rather than calling `load`
-  // directly means a retry follows exactly the same path as the first attempt.
-  const [attempt, setAttempt] = useState(0);
-
-  const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
-
-  /**
-   * Refetch whenever the tab is focused, not only when it first mounts.
-   *
-   * Two reasons, and the first is a real race. Onboarding writes to the server
-   * in the background so the route guard can flip immediately; if Profile were
-   * opened before that write landed it would read the row as it was a moment
-   * earlier. Tab screens stay mounted once visited, so without this the wrong
-   * answer would persist until the tree unmounted rather than self-correcting.
-   *
-   * Second, it keeps the card honest after anything else changes the row.
-   *
-   * The cost is a request per focus. That is the sort of thing a query cache
-   * would deduplicate, and M6 is where that arrives — refetching is the correct
-   * behaviour, and until then it is simply uncached.
-   *
-   * The first focus is skipped because it coincides with mount, and the effect
-   * below already fetches then. Without the guard the screen would fire two
-   * requests and render loading twice on the way in.
-   */
-  const mounted = useRef(false);
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!mounted.current) {
-        mounted.current = true;
-        return;
+  const query = useQuery({
+    // The key is evaluated even while disabled, so it needs a value for the
+    // signed-out case rather than being omitted.
+    queryKey: queryKeys.profile(userId ?? ''),
+    queryFn: async () => {
+      // Unreachable while `enabled` is false. Checking anyway is what lets this
+      // narrow `userId` instead of asserting it non-null.
+      if (userId === null) {
+        throw new Error('No account is signed in.');
       }
-      setAttempt((previous) => previous + 1);
-    }, [])
-  );
 
-  useEffect(() => {
-    if (!userId) {
-      return;
-    }
+      const result = await fetchProfile(userId);
 
-    // Guards against a resolved request writing state for an account that is no
-    // longer signed in — the same hazard `AuthProvider` handles with `settled`.
-    let cancelled = false;
-    setState({ status: 'loading' });
-
-    void fetchProfile(userId).then((result) => {
-      if (cancelled) {
-        return;
+      // Thrown rather than returned. `fetchProfile` reports failure in its
+      // result type, which suits a caller that renders it; React Query decides
+      // success by whether the promise rejects. The two conventions have to meet
+      // somewhere, and this is the seam — repeated in each hook rather than
+      // hidden behind a generic helper that would need a cast to type.
+      if (!result.ok) {
+        throw new Error(result.message);
       }
-      setState(
-        result.ok
-          ? { status: 'ready', profile: result.profile }
-          : { status: 'error', message: result.message, retry }
-      );
-    });
+      return result.profile;
+    },
+    enabled: userId !== null,
+  });
 
-    return () => {
-      cancelled = true;
+  if (query.isPending || userId === null) {
+    return { status: 'loading' };
+  }
+  if (query.isError) {
+    return {
+      status: 'error',
+      message: query.error.message,
+      retry: () => void query.refetch(),
     };
-  }, [userId, attempt, retry]);
-
-  return state;
+  }
+  return { status: 'ready', profile: query.data };
 }

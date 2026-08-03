@@ -25,6 +25,7 @@ import {
 } from '@/features/onboarding/types';
 import { fetchProfile, saveOnboarding, saveTimezone } from '@/features/profile/api';
 import { deviceTimeZone } from '@/lib/dates';
+import { queryClient, queryKeys } from '@/lib/query';
 
 type OnboardingDraftValue = {
   draft: OnboardingDraft;
@@ -184,7 +185,12 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
       // launch — and it does follow someone who changes timezone or travels.
       const zone = deviceTimeZone();
       if (zone && zone !== server.timezone) {
-        await saveTimezone(userId, zone);
+        const written = await saveTimezone(userId, zone);
+
+        if (written.ok && !cancelled) {
+          // Profile shows the stored zone, so the cached row is now behind.
+          void queryClient.invalidateQueries({ queryKey: queryKeys.profile(userId) });
+        }
       }
     })();
 
@@ -226,6 +232,14 @@ export function OnboardingProvider({ children }: { children: ReactNode }) {
         interests: record.preferences?.interests ?? [],
         commitment: record.preferences?.commitment ?? null,
         completedAt: record.preferences?.completedAt ?? new Date().toISOString(),
+      }).then((result) => {
+        // The Profile screen reads this row through the cache, so without an
+        // invalidation it would keep serving the pre-onboarding version for as
+        // long as that entry stays fresh. Only on success: a failed write left
+        // the server unchanged, and the reconcile will retry on next launch.
+        if (result.ok) {
+          void queryClient.invalidateQueries({ queryKey: queryKeys.profile(userId) });
+        }
       });
     },
     [userId]

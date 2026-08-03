@@ -1,3 +1,4 @@
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
@@ -14,13 +15,14 @@ import { createGoal } from '@/features/goals/api';
 import { useGoalDraft } from '@/features/goals/state';
 import { difficultyLabel, validateTitle } from '@/features/goals/types';
 import { useTheme } from '@/hooks/use-theme';
+import { invalidateDerived, queryKeys } from '@/lib/query';
 
 export default function GoalReviewScreen() {
   const colors = useTheme();
   const { draft } = useGoalDraft();
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
-  const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const missing: string[] = [];
@@ -47,28 +49,43 @@ export default function GoalReviewScreen() {
    * goal and no explanation. The user stays here until the row exists.
    *
    * Guarded twice against a double tap, the same way `features/auth/auth-form.tsx`
-   * is: a synchronous check plus a disabled button. A duplicate here would create
-   * two goals, and there is no way in the UI to remove one.
+   * is: `isPending` plus a disabled button. A duplicate here would create two
+   * goals, and there is no way in the UI to remove one.
    */
-  async function handleConfirm() {
-    if (busy || !user) {
+  const create = useMutation({
+    mutationFn: async () => {
+      if (!user) {
+        throw new Error('No account is signed in.');
+      }
+
+      const result = await createGoal(user.id, draft);
+
+      if (!result.ok) {
+        throw new Error(result.message);
+      }
+      return user.id;
+    },
+    onSuccess: async (userId) => {
+      // Required, not tidiness. Today's active-goal query is cached as "no
+      // goal", and with a non-zero staleTime it would serve that empty state to
+      // the screen we are about to navigate to. Awaited so the refetch is in
+      // flight before this screen goes away.
+      await queryClient.invalidateQueries({ queryKey: queryKeys.activeGoal(userId) });
+      void invalidateDerived(userId);
+
+      // `isPending` is deliberately left true: the screen is being dismissed,
+      // and re-enabling the button first opens a window to press it again.
+      router.dismissTo('/');
+    },
+    onError: (mutationError) => setError(mutationError.message),
+  });
+
+  function handleConfirm() {
+    if (create.isPending) {
       return;
     }
-
-    setBusy(true);
     setError(null);
-
-    const result = await createGoal(user.id, draft);
-
-    if (!result.ok) {
-      setBusy(false);
-      setError(result.message);
-      return;
-    }
-
-    // Not clearing `busy` on success: this screen is being dismissed, and
-    // re-enabling the button first gives a brief window to press it again.
-    router.dismissTo('/');
+    create.mutate();
   }
 
   return (
@@ -114,9 +131,9 @@ export default function GoalReviewScreen() {
           </Text>
         ) : null}
         <Button
-          label={busy ? 'Saving…' : 'Confirm goal'}
-          onPress={() => void handleConfirm()}
-          disabled={!ready || busy}
+          label={create.isPending ? 'Saving…' : 'Confirm goal'}
+          onPress={handleConfirm}
+          disabled={!ready || create.isPending}
           accessibilityHint={ready ? undefined : `Still needs ${missing.join(', ')}`}
         />
         {ready ? null : (
