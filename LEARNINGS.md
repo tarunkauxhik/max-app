@@ -212,3 +212,27 @@ Skills may propose an update after the same failure pattern appears twice. The u
   about *where the types came from*. Check the export map before assuming a subpath is typed,
   especially when following a guide that shows a different entry point. This matters again at M6,
   which reuses this package for the offline cache.
+
+- Date: 2026-08-02
+- Area: Hermes `Intl` timezone on React Native 0.81
+- Symptom: none — this records a measurement that contradicts the documentation found while planning.
+- Root cause: n/a. Widely cited reports, and several still-open library issues, say Hermes does not
+  expose the platform timezone to `Intl` and that
+  `Intl.DateTimeFormat().resolvedOptions().timeZone` returns `"UTC"` on every device. M5a was planned
+  defensively on that basis.
+- Verified fix: none needed. **On device it returns the real zone.** An Asia/Kolkata phone reported
+  `"Asia/Calcutta"` — correct, under the tz database's legacy alias rather than the canonical name.
+  The alias is deliberately not normalised: `Asia/Calcutta` is present in `pg_timezone_names`, has
+  the same `+05:30` offset as `Asia/Kolkata`, and `now() at time zone` returns an identical result
+  for both, so mapping aliases would mean shipping a copy of the tz backward file to produce a value
+  Postgres already treats as the same.
+- Test/evidence: measured by displaying the stored value in the app rather than by adding a
+  temporary `console.log`, because SECURITY.md records that the app contains none and that should
+  stay true. Confirmed server-side afterwards: two `profiles` rows hold `Asia/Calcutta`, and
+  `'Asia/Calcutta' in (select name from pg_timezone_names)` is true. The `validate_timezone` trigger
+  accepted it, which is the part that would have failed had the alias been unknown.
+- Should a rule or skill change be proposed? No, but note the shape of the mistake avoided: the
+  defensive design — return null rather than store a guess — was right to build and cost nothing once
+  the answer turned out to be favourable. The null path is kept, because `Intl` can still be absent
+  from a minimal engine build and an engine can regress. Stale ecosystem reports are a reason to
+  measure, not a reason to believe.

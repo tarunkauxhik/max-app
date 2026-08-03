@@ -32,10 +32,19 @@ export function localDateString(date: Date = new Date()): string {
  * The device's IANA timezone name, or null when it cannot be trusted.
  *
  * Hermes has a long history of not exposing the platform timezone to `Intl`,
- * returning `"UTC"` on every device regardless of where it is. Whether that is
- * still true on React Native 0.81 is a question about this specific engine build,
- * so this returns null rather than guessing, and the caller leaves
- * `profiles.timezone` at its schema default.
+ * returning `"UTC"` on every device regardless of where it is. **Measured on
+ * device 2026-08-02: that is no longer true on React Native 0.81.** An
+ * Asia/Kolkata phone returned `"Asia/Calcutta"` — the real zone, under its
+ * legacy alias rather than the canonical name.
+ *
+ * The alias is not worth normalising. Postgres accepts it: it is present in
+ * `pg_timezone_names`, carries the same +05:30 offset as `Asia/Kolkata`, and the
+ * two are interchangeable in `at time zone`. Mapping aliases here would mean
+ * shipping and maintaining a copy of the tz backward file to produce a value the
+ * database already treats as identical.
+ *
+ * The null path is kept regardless, because it is not only about Hermes: `Intl`
+ * can be absent from a minimal engine build, and a future engine could regress.
  *
  * `"UTC"` is treated as "no answer" even though it is a legitimate zone. A user
  * genuinely in UTC loses nothing: the column already defaults to `'UTC'`, so the
