@@ -30,6 +30,8 @@ export type CheckInEntry = {
   id: string;
   /** The `YYYY-MM-DD` date; formatted for display at the point of rendering. */
   date: string;
+  /** What distinguishes two check-ins made on the same day for different goals. */
+  goalTitle: string | null;
   /** Null when the user saved a check-in without writing anything. */
   note: string | null;
   actionsCompleted: number;

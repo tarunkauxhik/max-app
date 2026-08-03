@@ -118,10 +118,11 @@ function InsightsContent({ data }: { data: InsightsSnapshot }) {
                     accessible
                     accessibilityLabel={[
                       longDateLabel(checkIn.date),
+                      checkIn.goalTitle,
                       checkIn.actionsTotal > 0
-                        ? `${checkIn.actionsCompleted} of ${checkIn.actionsTotal} actions complete.`
+                        ? `${checkIn.actionsCompleted} of ${checkIn.actionsTotal} actions complete`
                         : null,
-                      checkIn.note ?? 'No note.',
+                      checkIn.note ?? 'No note',
                     ]
                       .filter(Boolean)
                       .join('. ')}
@@ -141,6 +142,11 @@ function InsightsContent({ data }: { data: InsightsSnapshot }) {
                         </Text>
                       ) : null}
                     </View>
+                    {checkIn.goalTitle ? (
+                      <Text variant="caption" tone="muted">
+                        {checkIn.goalTitle}
+                      </Text>
+                    ) : null}
                     <Text variant="caption" tone={checkIn.note ? 'secondary' : 'muted'}>
                       {checkIn.note ?? 'No note written.'}
                     </Text>
