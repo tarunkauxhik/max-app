@@ -19,7 +19,15 @@ export type TextFieldProps = Omit<TextInputProps, 'style'> & {
   hint?: string;
 };
 
-export function TextField({ label, error, hint, onFocus, onBlur, ...rest }: TextFieldProps) {
+export function TextField({
+  label,
+  error,
+  hint,
+  onFocus,
+  onBlur,
+  multiline,
+  ...rest
+}: TextFieldProps) {
   const colors = useTheme();
   const [focused, setFocused] = useState(false);
 
@@ -42,10 +50,17 @@ export function TextField({ label, error, hint, onFocus, onBlur, ...rest }: Text
         </Text>
       ) : null}
 
+      {/*
+        `multiline` is handled here rather than left to callers. `style` is
+        omitted from this component's props on purpose, so a caller passing
+        `multiline` alone would get a single-line-height box with its text
+        vertically centred on Android — the primitive owns that, not the screen.
+      */}
       <TextInput
         accessibilityLabel={label}
         accessibilityHint={error ?? hint}
         placeholderTextColor={colors.textMuted}
+        multiline={multiline}
         onFocus={(event) => {
           setFocused(true);
           onFocus?.(event);
@@ -57,6 +72,7 @@ export function TextField({ label, error, hint, onFocus, onBlur, ...rest }: Text
         style={[
           styles.input,
           Typography.body,
+          multiline ? styles.multiline : null,
           { color: colors.textPrimary, backgroundColor: colors.bg, borderColor },
         ]}
         {...rest}
@@ -81,5 +97,13 @@ const styles = StyleSheet.create({
     borderRadius: Radii.md,
     paddingHorizontal: Spacing.md,
     paddingVertical: Spacing.sm,
+  },
+  multiline: {
+    // Roughly four lines, so the field looks like somewhere to write a sentence
+    // rather than a name. It still grows with the content.
+    minHeight: MinTarget * 2.5,
+    // Android centres multiline text vertically by default, which leaves the
+    // caret floating in the middle of an empty box. iOS already top-aligns.
+    textAlignVertical: 'top',
   },
 });

@@ -181,12 +181,19 @@ export async function fetchCheckIn(
 export async function createCheckIn(
   userId: string,
   goalId: string,
-  date: string
+  date: string,
+  note: string
 ): Promise<WriteResult> {
+  const trimmed = note.trim();
+
   const { error } = await supabase.from('check_ins').insert({
     user_id: userId,
     goal_id: goalId,
     check_in_date: date,
+    // Null rather than an empty string. The column is nullable precisely so
+    // "wrote nothing" and "wrote nothing today" are the same fact, and Insights
+    // can render the difference between a note and no note.
+    note: trimmed.length > 0 ? trimmed : null,
   });
 
   if (!error || error.code === UNIQUE_VIOLATION) {

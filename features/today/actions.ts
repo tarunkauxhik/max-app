@@ -1,5 +1,21 @@
 import { difficultyLabel, type Goal } from '@/features/goals/types';
 
+/** Mirrors `check_ins_note_length`. The server is the authority; this avoids a round trip. */
+export const NOTE_MAX_LENGTH = 2000;
+
+/** Shows only as the limit approaches, so it is guidance rather than pressure. */
+export const NOTE_COUNTER_THRESHOLD = NOTE_MAX_LENGTH - 200;
+
+/**
+ * A check-in note is optional, so the only way to be invalid is to be too long.
+ * Same shape as `validateTitle`: returns null when valid.
+ */
+export function validateNote(note: string): string | null {
+  return note.trim().length > NOTE_MAX_LENGTH
+    ? `Keep it under ${NOTE_MAX_LENGTH} characters`
+    : null;
+}
+
 /**
  * The shape of one action before it becomes a row.
  *

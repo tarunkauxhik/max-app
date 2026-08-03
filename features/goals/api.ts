@@ -24,6 +24,7 @@ export type WriteResult = { ok: true } | { ok: false; message: string };
 const READ_FAILED = 'Could not load your goal. Check your connection and try again.';
 const CREATE_FAILED = 'Could not save your goal. Check your connection and try again.';
 const ARCHIVE_FAILED = 'Could not archive that goal. Check your connection and try again.';
+const COMPLETE_FAILED = 'Could not complete that goal. Check your connection and try again.';
 
 type GoalRow = {
   id: string;
@@ -119,15 +120,42 @@ export async function createGoal(userId: string, draft: GoalDraft): Promise<Crea
  * rather than as success affecting zero rows — see `features/profile/api.ts`.
  */
 export async function archiveGoal(goalId: string, userId: string): Promise<WriteResult> {
+  return setLifecycle(goalId, userId, 'archived', ARCHIVE_FAILED);
+}
+
+/**
+ * The other end of the lifecycle, reachable from the app since M5b.
+ *
+ * `status = 'completed'` has existed since M3 and nothing could set it, so the
+ * Profile "goals finished" figure had no way to be anything but zero. Same
+ * constraint pairing as archiving — `goals_status_timestamps` requires
+ * `completed_at` alongside the status — and the same column grant covers both.
+ *
+ * Deliberately one-way. Un-completing would need its own decision about what
+ * happens to the check-ins recorded under a finished goal, and nothing needs it
+ * yet.
+ */
+export async function completeGoal(goalId: string, userId: string): Promise<WriteResult> {
+  return setLifecycle(goalId, userId, 'completed', COMPLETE_FAILED);
+}
+
+async function setLifecycle(
+  goalId: string,
+  userId: string,
+  status: 'archived' | 'completed',
+  failureMessage: string
+): Promise<WriteResult> {
+  const now = new Date().toISOString();
+
   const { data, error } = await supabase
     .from('goals')
-    .update({ status: 'archived', archived_at: new Date().toISOString() })
+    .update(status === 'archived' ? { status, archived_at: now } : { status, completed_at: now })
     .eq('id', goalId)
     .eq('user_id', userId)
     .select('id');
 
   if (error || !data || data.length === 0) {
-    return { ok: false, message: ARCHIVE_FAILED };
+    return { ok: false, message: failureMessage };
   }
   return { ok: true };
 }

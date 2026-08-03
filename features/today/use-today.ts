@@ -34,7 +34,7 @@ type TodayValue = {
   writeError: string | null;
   dismissWriteError: () => void;
   toggleAction: (actionId: string) => void;
-  checkIn: () => void;
+  checkIn: (note: string) => void;
   checkingIn: boolean;
 };
 
@@ -158,25 +158,28 @@ export function useToday(goal: Goal): TodayValue {
    * quietly reverting would be the wrong way round. It is also cheap to wait
    * for: one insert, once a day.
    */
-  const checkIn = useCallback(() => {
-    if (!userId || checkingIn || state.status !== 'ready' || state.checkedIn) {
-      return;
-    }
-
-    setCheckingIn(true);
-
-    void createCheckIn(userId, goal.id, localDateString()).then((result) => {
-      setCheckingIn(false);
-
-      if (!result.ok) {
-        setWriteError(result.message);
+  const checkIn = useCallback(
+    (note: string) => {
+      if (!userId || checkingIn || state.status !== 'ready' || state.checkedIn) {
         return;
       }
-      setState((current) =>
-        current.status === 'ready' ? { ...current, checkedIn: true } : current
-      );
-    });
-  }, [userId, goal.id, checkingIn, state]);
+
+      setCheckingIn(true);
+
+      void createCheckIn(userId, goal.id, localDateString(), note).then((result) => {
+        setCheckingIn(false);
+
+        if (!result.ok) {
+          setWriteError(result.message);
+          return;
+        }
+        setState((current) =>
+          current.status === 'ready' ? { ...current, checkedIn: true } : current
+        );
+      });
+    },
+    [userId, goal.id, checkingIn, state]
+  );
 
   return { state, writeError, dismissWriteError, toggleAction, checkIn, checkingIn };
 }
