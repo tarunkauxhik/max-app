@@ -1,34 +1,48 @@
 import { difficultyLabel, type Goal } from '@/features/goals/types';
 
-export type DailyAction = {
-  id: string;
+/**
+ * The shape of one action before it becomes a row.
+ *
+ * `position` is 1-based to match the `goal_actions_position_range` constraint,
+ * and it is what `goal_actions_goal_date_position_key` uses to make a duplicate
+ * seed impossible rather than merely unlikely.
+ */
+export type ActionTemplate = {
+  position: number;
   title: string;
-  note?: string;
+  note: string | null;
 };
 
 /**
- * Today's actions for a goal.
+ * Today's plan for a goal.
  *
- * These are derived, not stored: the real plan comes from the AI planning
- * milestone, and inventing a fixture here would put a second, competing goal on
- * screen next to the one the user actually created. Three actions is the shape
- * the real plan will take — a main block of work, a review, and a log.
+ * Still derived rather than intelligent: the real plan arrives with the AI
+ * planning milestone, and three actions — a block of work, a review, and a log —
+ * is the shape it will take. What changed in M5a.4 is where the output goes.
+ * These are no longer rendered directly; they seed `goal_actions` rows for one
+ * date, once, and every later read comes from the table.
+ *
+ * That is why this stayed client-side. Putting the generator in a database
+ * function would mean every change to the plan became a migration, which is the
+ * trap ADR-012 avoided by keeping the difficulty chips out of the schema — and
+ * M8 replaces this function entirely.
  */
-export function deriveActions(goal: Goal): DailyAction[] {
+export function planActionsFor(goal: Goal): ActionTemplate[] {
   const pace = difficultyLabel(goal.difficulty).toLowerCase();
 
   return [
     {
-      id: `${goal.id}-main`,
+      position: 1,
       title: `${goal.title} — ${goal.minutesPerDay} minutes`,
       note: `Your ${pace} pace for today`,
     },
     {
-      id: `${goal.id}-review`,
+      position: 2,
       title: 'Review what you did yesterday',
+      note: null,
     },
     {
-      id: `${goal.id}-log`,
+      position: 3,
       title: 'Log how it went',
       note: 'One line is enough',
     },

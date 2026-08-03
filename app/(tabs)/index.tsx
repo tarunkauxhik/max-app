@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Alert, ScrollView, StyleSheet, View } from 'react-native';
 
 import { ActionRow } from '@/components/ui/action-row';
@@ -15,7 +15,7 @@ import { useAuth } from '@/features/auth/state';
 import { archiveGoal } from '@/features/goals/api';
 import { useActiveGoal } from '@/features/goals/use-active-goal';
 import { difficultyLabel, type Goal } from '@/features/goals/types';
-import { deriveActions } from '@/features/today/actions';
+import { useToday } from '@/features/today/use-today';
 import { useTheme } from '@/hooks/use-theme';
 
 function TodayLoading() {
@@ -46,20 +46,14 @@ function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void 
   const colors = useTheme();
   const { user } = useAuth();
 
-  const [completedIds, setCompletedIds] = useState<string[]>([]);
-  const [checkedIn, setCheckedIn] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const { state, writeError, dismissWriteError, toggleAction, checkIn, checkingIn } =
+    useToday(goal);
 
-  const toggle = useCallback((id: string) => {
-    setCheckedIn(false);
-    setCompletedIds((previous) =>
-      previous.includes(id) ? previous.filter((entry) => entry !== id) : [...previous, id]
-    );
-  }, []);
+  const actions = state.status === 'ready' ? state.actions : [];
+  const checkedIn = state.status === 'ready' && state.checkedIn;
 
-  const actions = useMemo(() => deriveActions(goal), [goal]);
-
-  const completed = completedIds.length;
+  const completed = actions.filter((action) => action.completedAt !== null).length;
   const total = actions.length;
   const allComplete = total > 0 && completed === total;
 
@@ -116,33 +110,69 @@ function GoalContent({ goal, onArchived }: { goal: Goal; onArchived: () => void 
 
       <View style={styles.section}>
         <Text variant="heading">Actions</Text>
-        <Card style={styles.actions}>
-          {actions.map((action, index) => (
-            <View key={action.id}>
-              {index > 0 ? (
-                <View style={[styles.divider, { backgroundColor: colors.border }]} />
-              ) : null}
-              <ActionRow
-                title={action.title}
-                note={action.note}
-                completed={completedIds.includes(action.id)}
-                onToggle={() => toggle(action.id)}
-              />
-            </View>
-          ))}
-        </Card>
-        <Text variant="caption" tone="muted">
-          Ticking an action is not saved yet. Your goal is.
-        </Text>
+
+        {state.status === 'loading' ? (
+          <Card accessible accessibilityLabel="Loading today's actions">
+            <Skeleton height={44} />
+            <Skeleton height={44} />
+            <Skeleton height={44} />
+          </Card>
+        ) : null}
+
+        {state.status === 'error' ? (
+          <Card>
+            <Text variant="body" tone="secondary">
+              {state.message}
+            </Text>
+            <Button label="Try again" variant="secondary" onPress={state.retry} />
+          </Card>
+        ) : null}
+
+        {state.status === 'ready' ? (
+          <Card style={styles.actions}>
+            {actions.map((action, index) => (
+              <View key={action.id}>
+                {index > 0 ? (
+                  <View style={[styles.divider, { backgroundColor: colors.border }]} />
+                ) : null}
+                <ActionRow
+                  title={action.title}
+                  note={action.note ?? undefined}
+                  completed={action.completedAt !== null}
+                  onToggle={() => toggleAction(action.id)}
+                />
+              </View>
+            ))}
+          </Card>
+        ) : null}
+
+        {/*
+          A failed write, surfaced without an alert. The row has already rolled
+          back, so this explains a tick that visibly undid itself rather than
+          interrupting to demand acknowledgement of something already handled.
+        */}
+        {writeError ? (
+          <Card>
+            <Text variant="caption" tone="danger" accessibilityLiveRegion="polite">
+              {writeError}
+            </Text>
+            <Button label="Dismiss" variant="ghost" onPress={dismissWriteError} />
+          </Card>
+        ) : null}
       </View>
 
       <View style={styles.section}>
         <Button
-          label={checkedIn ? 'Checked in' : 'Check in for today'}
-          onPress={() => setCheckedIn(true)}
-          disabled={!allComplete || checkedIn}
+          label={checkingIn ? 'Checking in…' : checkedIn ? 'Checked in' : 'Check in for today'}
+          onPress={checkIn}
+          disabled={!allComplete || checkedIn || checkingIn}
           accessibilityHint={allComplete ? undefined : 'Complete every action to enable check in'}
         />
+        {checkedIn ? (
+          <Text variant="caption" tone="success">
+            Saved. Your streak counts this day.
+          </Text>
+        ) : null}
       </View>
 
       <Button
