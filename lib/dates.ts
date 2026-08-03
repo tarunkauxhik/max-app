@@ -29,6 +29,44 @@ export function localDateString(date: Date = new Date()): string {
 }
 
 /**
+ * A calendar date shifted by whole days, in and out as `YYYY-MM-DD`.
+ *
+ * Built at **noon**, not midnight. On a spring-forward DST boundary some zones
+ * have no 00:00 at all — Asia/Beirut and several South American zones shift at
+ * midnight — and `new Date(y, m, d)` then silently lands on the previous or next
+ * day. Noon is at least eleven hours from any real-world transition, so the
+ * arithmetic stays on the date it was given.
+ *
+ * `setDate` handles month and year boundaries, including leap days, so there is
+ * no wraparound arithmetic here to get wrong.
+ */
+export function shiftDate(date: string, days: number): string {
+  const [year, month, day] = date.split('-').map(Number);
+  const shifted = new Date(year, month - 1, day, 12);
+
+  shifted.setDate(shifted.getDate() + days);
+  return localDateString(shifted);
+}
+
+/** Short weekday label for a `YYYY-MM-DD` date, e.g. "Mon". */
+export function weekdayLabel(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+
+  return new Date(year, month - 1, day, 12).toLocaleDateString(undefined, { weekday: 'short' });
+}
+
+/** Long form for display, e.g. "Sunday 2 August". */
+export function longDateLabel(date: string): string {
+  const [year, month, day] = date.split('-').map(Number);
+
+  return new Date(year, month - 1, day, 12).toLocaleDateString(undefined, {
+    weekday: 'long',
+    day: 'numeric',
+    month: 'long',
+  });
+}
+
+/**
  * The device's IANA timezone name, or null when it cannot be trusted.
  *
  * Hermes has a long history of not exposing the platform timezone to `Intl`,

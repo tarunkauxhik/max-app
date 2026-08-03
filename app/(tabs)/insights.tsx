@@ -10,11 +10,15 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Text } from '@/components/ui/text';
 import { WeekBars } from '@/components/ui/week-bars';
-import { SAMPLE_DATA_NOTE } from '@/constants/copy';
 import { Spacing } from '@/constants/tokens';
-import { completeDayCount, type InsightsSnapshot } from '@/features/insights/mock-data';
+import {
+  completeDayCount,
+  plannedDayCount,
+  type InsightsSnapshot,
+} from '@/features/insights/types';
 import { useInsights } from '@/features/insights/use-insights';
 import { useTheme } from '@/hooks/use-theme';
+import { longDateLabel } from '@/lib/dates';
 
 function InsightsLoading() {
   return (
@@ -40,13 +44,24 @@ function InsightsContent({ data }: { data: InsightsSnapshot }) {
   const colors = useTheme();
 
   const complete = completeDayCount(data.week);
+  const planned = plannedDayCount(data.week);
   const isEmpty = data.goals.length === 0 && data.recentCheckIns.length === 0;
+
+  /*
+    "of 7" would count days the app was never opened as failures. Actions are
+    seeded lazily (ADR-016), so a day with no plan is not a missed day — the
+    denominator is days that had one.
+  */
+  const weekSummary =
+    planned === 0
+      ? 'No actions planned in the last seven days'
+      : `${complete} of ${planned} planned ${planned === 1 ? 'day' : 'days'} complete`;
 
   return (
     <View style={styles.sections}>
       <Card>
         <Text variant="heading">This week</Text>
-        <WeekBars days={data.week} summary={`${complete} of 7 days complete`} />
+        <WeekBars days={data.week} summary={weekSummary} />
       </Card>
 
       <Card>
@@ -101,18 +116,33 @@ function InsightsContent({ data }: { data: InsightsSnapshot }) {
                   ) : null}
                   <View
                     accessible
-                    accessibilityLabel={`${checkIn.date}. ${checkIn.actionsCompleted} of ${checkIn.actionsTotal} actions complete. ${checkIn.note}`}
+                    accessibilityLabel={[
+                      longDateLabel(checkIn.date),
+                      checkIn.actionsTotal > 0
+                        ? `${checkIn.actionsCompleted} of ${checkIn.actionsTotal} actions complete.`
+                        : null,
+                      checkIn.note ?? 'No note.',
+                    ]
+                      .filter(Boolean)
+                      .join('. ')}
                     style={styles.listRow}>
                     <View style={styles.checkInHeader}>
                       <Text variant="bodyStrong" style={styles.checkInDate}>
-                        {checkIn.date}
+                        {longDateLabel(checkIn.date)}
                       </Text>
-                      <Text variant="caption" tone="muted">
-                        {checkIn.actionsCompleted}/{checkIn.actionsTotal}
-                      </Text>
+                      {/*
+                        Hidden rather than shown as 0/0 when the check-in falls
+                        outside the fetched window of actions — an absent ratio
+                        is honest, a zero one is a claim.
+                      */}
+                      {checkIn.actionsTotal > 0 ? (
+                        <Text variant="caption" tone="muted">
+                          {checkIn.actionsCompleted}/{checkIn.actionsTotal}
+                        </Text>
+                      ) : null}
                     </View>
-                    <Text variant="caption" tone="secondary">
-                      {checkIn.note}
+                    <Text variant="caption" tone={checkIn.note ? 'secondary' : 'muted'}>
+                      {checkIn.note ?? 'No note written.'}
                     </Text>
                   </View>
                 </View>
@@ -138,17 +168,20 @@ export default function InsightsScreen() {
           <Text variant="caption" tone="muted">
             Your last seven days
           </Text>
-          <Text variant="caption" tone="muted">
-            {SAMPLE_DATA_NOTE}
-          </Text>
         </View>
 
-        {/*
-          `error` is part of InsightsState but cannot occur while the data is a
-          local fixture, so no retry branch ships yet. The backend milestone adds
-          it here — see the state union in use-insights.ts.
-        */}
-        {state.status === 'ready' ? <InsightsContent data={state.data} /> : <InsightsLoading />}
+        {state.status === 'loading' ? <InsightsLoading /> : null}
+
+        {state.status === 'error' ? (
+          <Card>
+            <Text variant="body" tone="secondary">
+              {state.message}
+            </Text>
+            <Button label="Try again" variant="secondary" onPress={state.retry} />
+          </Card>
+        ) : null}
+
+        {state.status === 'ready' ? <InsightsContent data={state.data} /> : null}
       </ScrollView>
     </Screen>
   );

@@ -1,43 +1,69 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { insightsMock, type InsightsSnapshot } from '@/features/insights/mock-data';
+import { useAuth } from '@/features/auth/state';
+import { fetchInsights } from '@/features/insights/api';
+import type { InsightsSnapshot } from '@/features/insights/types';
 
 /**
- * The three states any server-backed screen in MAX can be in.
+ * Insights, derived from real rows since M5b.
  *
- * `error` is declared but never produced here: there is no network yet, so
- * rendering a retry branch would ship UI that can never be reached. The shape is
- * fixed now so the backend milestone implements one agreed pattern — a message
- * plus a `retry` the user can actually press — rather than inventing a new one
- * per screen. See ADR-009.
+ * This union was written in M1e against a fixture, with a comment saying the
+ * error branch could not occur yet and the backend milestone would implement it.
+ * That is what happened here — the shape did not change, only what fills it.
  */
 export type InsightsState =
   | { status: 'loading' }
   | { status: 'ready'; data: InsightsSnapshot }
   | { status: 'error'; message: string; retry: () => void };
 
-const LOAD_DELAY_MS = 600;
-
-/**
- * Simulates a fetch so the loading path is a real, testable state rather than a
- * branch nothing ever reaches. There is no network and no storage here.
- *
- * To exercise the empty state on device, swap `insightsMock` for
- * `emptyInsightsMock` below. A visible debug toggle was deliberately avoided —
- * it would ship as dead UI.
- */
 export function useInsights(): InsightsState {
-  const [state, setState] = useState<InsightsState>({ status: 'loading' });
+  const { user } = useAuth();
+  const userId = user?.id ?? null;
 
-  const load = useCallback(() => {
-    setState({ status: 'loading' });
-    return setTimeout(() => setState({ status: 'ready', data: insightsMock }), LOAD_DELAY_MS);
-  }, []);
+  const [state, setState] = useState<InsightsState>({ status: 'loading' });
+  const [attempt, setAttempt] = useState(0);
+
+  const retry = useCallback(() => setAttempt((previous) => previous + 1), []);
+
+  // Refetch on focus: checking in on Today should be visible the moment the user
+  // switches tabs, and this screen is almost always reached that way. The first
+  // focus is skipped because it coincides with mount.
+  const mounted = useRef(false);
+
+  useFocusEffect(
+    useCallback(() => {
+      if (!mounted.current) {
+        mounted.current = true;
+        return;
+      }
+      setAttempt((previous) => previous + 1);
+    }, [])
+  );
 
   useEffect(() => {
-    const timer = load();
-    return () => clearTimeout(timer);
-  }, [load]);
+    if (!userId) {
+      return;
+    }
+
+    let cancelled = false;
+    setState({ status: 'loading' });
+
+    void fetchInsights(userId).then((result) => {
+      if (cancelled) {
+        return;
+      }
+      setState(
+        result.ok
+          ? { status: 'ready', data: result.snapshot }
+          : { status: 'error', message: result.message, retry }
+      );
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [userId, attempt, retry]);
 
   return state;
 }
