@@ -8,11 +8,10 @@ import { SettingsRow } from '@/components/ui/settings-row';
 import { Skeleton } from '@/components/ui/skeleton';
 import { StatTile } from '@/components/ui/stat-tile';
 import { Text } from '@/components/ui/text';
-import { SAMPLE_DATA_NOTE } from '@/constants/copy';
 import { Radii, Spacing } from '@/constants/tokens';
 import { useAuth } from '@/features/auth/state';
 import { commitmentLabel, interestLabel } from '@/features/onboarding/types';
-import { profileMock } from '@/features/profile/mock-data';
+import { useAchievements } from '@/features/profile/use-achievements';
 import { useProfile } from '@/features/profile/use-profile';
 import { useTheme } from '@/hooks/use-theme';
 
@@ -142,6 +141,51 @@ function Identity() {
   );
 }
 
+/**
+ * Real figures since M5b, computed by the same functions Insights uses.
+ *
+ * This was the last fixture in MAX. "Goals finished" is only meaningful because
+ * M5b also made `status = 'completed'` reachable — a tile that could never be
+ * anything but zero would have been worse than no tile.
+ */
+function Achievements() {
+  const state = useAchievements();
+
+  return (
+    <Card>
+      <Text variant="heading">Achievements</Text>
+
+      {state.status === 'loading' ? (
+        <View accessible accessibilityLabel="Loading achievements" style={styles.tiles}>
+          <Skeleton height={64} />
+          <Skeleton height={64} />
+          <Skeleton height={64} />
+        </View>
+      ) : null}
+
+      {state.status === 'error' ? (
+        <>
+          <Text variant="body" tone="secondary">
+            {state.message}
+          </Text>
+          <Button label="Try again" variant="secondary" onPress={state.retry} />
+        </>
+      ) : null}
+
+      {state.status === 'ready' ? (
+        <View style={styles.tiles}>
+          <StatTile
+            value={String(state.achievements.longestStreakDays)}
+            label="Longest streak"
+          />
+          <StatTile value={String(state.achievements.checkInCount)} label="Check-ins" />
+          <StatTile value={String(state.achievements.goalsCompleted)} label="Goals finished" />
+        </View>
+      ) : null}
+    </Card>
+  );
+}
+
 function RowGroup({ rows }: { rows: PlaceholderRow[] }) {
   const colors = useTheme();
 
@@ -234,7 +278,6 @@ function ProfileDetails() {
 
 export default function ProfileScreen() {
   const colors = useTheme();
-  const { achievements } = profileMock;
 
   return (
     <Screen>
@@ -249,21 +292,7 @@ export default function ProfileScreen() {
 
         <ProfileDetails />
 
-        <Card>
-          <Text variant="heading">Achievements</Text>
-          <Text variant="caption" tone="muted">
-            {SAMPLE_DATA_NOTE}
-          </Text>
-          <View style={styles.tiles}>
-            {achievements.map((achievement) => (
-              <StatTile
-                key={achievement.id}
-                value={achievement.value}
-                label={achievement.label}
-              />
-            ))}
-          </View>
-        </Card>
+        <Achievements />
 
         <View style={styles.section}>
           <Text variant="heading">Preferences</Text>
